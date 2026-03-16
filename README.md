@@ -82,7 +82,7 @@ Bundler:
 \fs24 \cf0 \kerning1\expnd0\expndtw0 {\listtext	1	}\expnd0\expndtw0\kerning0
 Clone the repository:
 \f2\b0 \uc0\u8232 
-\f3\fs26 git clone [https://github.com/your-username/tipid-menu-ph.git](https://github.com/your-username/tipid-menu-ph.git)\
+\f3\fs26 git clone [https://github.com/your-username/tipid-menu-ph.git](https://github.com/WAIA-io/Tipid-Menu-Ph.git)\
 \pard\tx220\tx720\pardeftab720\li720\fi-720\partightenfactor0
 \ls3\ilvl0\cf0 \kerning1\expnd0\expndtw0 {\listtext	2	}\expnd0\expndtw0\kerning0
 cd tipid-menu-ph\
