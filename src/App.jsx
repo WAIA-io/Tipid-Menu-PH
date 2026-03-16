@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
-  getFirestore, collection, doc, setDoc, onSnapshot, addDoc, updateDoc, increment, arrayUnion, arrayRemove 
+  getFirestore, collection, doc, setDoc, onSnapshot, addDoc, updateDoc, increment, arrayUnion, arrayRemove, serverTimestamp 
 } from 'firebase/firestore';
 import { 
   getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged 
@@ -9,7 +9,7 @@ import {
 import { 
   MapPin, Utensils, User, Lock, Search, Plus, ArrowUpCircle, 
   Coffee, Pizza, X, Navigation2, Map as MapIcon, Car, List, 
-  ShieldCheck, Star, Zap, Award, CheckCircle, ChevronRight, Share2, Info, Heart, Edit, Crown, Phone, Mail, Calendar
+  ShieldCheck, Star, Zap, Award, CheckCircle, ChevronRight, Share2, Info, Heart, Edit
 } from 'lucide-react';
 
 // --- Firebase Configuration ---
@@ -36,11 +36,15 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// RULE 1: Sanitize appId
-const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'tipid-menu-default';
-const appId = rawAppId.replace(/\//g, '_');
+// Sanitize App ID to ensure Firestore paths have the correct number of segments
+let appId = 'default-app-id';
+if (typeof __app_id !== 'undefined') {
+  appId = __app_id.replace(/\//g, '_');
+}
 
-// --- Mock Data ---
+const isDummyConfig = firebaseConfig?.apiKey?.includes("AIzaSyAkvxTp77xtqywY");
+
+// --- Mock Data (Version 2 with top/left map positions) ---
 const MOCK_RESTAURANTS = [
   { id: '1', name: 'Jollibee', category: 'Fast Food', rating: 4.8, address: 'BGC, Taguig', lat: 14.5547, lng: 121.0244, top: '40%', left: '50%', img: '🐝', verified: true },
   { id: '2', name: "McDonald's", category: 'Fast Food', rating: 4.5, address: 'Makati Ave', lat: 14.56, lng: 121.03, top: '60%', left: '30%', img: '🍔', verified: true },
@@ -70,10 +74,11 @@ const TIERS = [
 
 export default function App() {
   const [user, setUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
   const [userData, setUserData] = useState({ 
-    points: 50, isPro: false, isVerified: false, username: 'Foodie', avatar: '👤', favorites: [], following: [],
-    fullName: '', email: '', mobile: '', dob: ''
+    points: 50, isPro: false, isVerified: false, username: 'Foodie', avatar: '👤', favorites: [], following: [], hacksCount: 0, totalSavings: 0
   });
+  
   const [restaurants] = useState(MOCK_RESTAURANTS);
   const [hacks, setHacks] = useState(MOCK_HACKS);
   const [promos] = useState(MOCK_PROMOS);
@@ -83,23 +88,20 @@ export default function App() {
   const [selectedRes, setSelectedRes] = useState(null);
   
   const [showVerifyModal, setShowVerifyModal] = useState(false);
-  const [verifyStep, setVerifyStep] = useState(1);
-  const [verifyForm, setVerifyForm] = useState({ fullName: '', email: '', mobile: '', dob: '' });
-  
   const [showAddHackModal, setShowAddHackModal] = useState(false);
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  
   const [otpInput, setOtpInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [editForm, setEditForm] = useState({ username: '', avatar: '' });
   const [toast, setToast] = useState('');
 
-  // Helper to derive the user document reference safely
   const getUserRef = () => {
     if (!user?.uid) return null;
     return doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
   };
 
-  // Auth Initialization
+  // Auth Handshake (Kept for stability)
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -109,17 +111,22 @@ export default function App() {
           await signInAnonymously(auth);
         }
       } catch (err) {
-        console.error("Auth failed", err);
+        console.error("Auth init error", err);
       }
     };
     initAuth();
-    const unsubscribe = onAuthStateChanged(auth, setUser);
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      if (u) {
+        setUser(u);
+        setAuthReady(true);
+      }
+    });
     return () => unsubscribe();
   }, []);
 
-  // Data Fetching with defensive guards
+  // Data Sync (Kept strict guard to prevent permissions crash)
   useEffect(() => {
-    if (!user?.uid || !db) return;
+    if (!authReady || !user?.uid) return;
 
     const userRef = getUserRef();
     const unsubUser = onSnapshot(userRef, (snap) => {
@@ -128,30 +135,43 @@ export default function App() {
         setUserData(prev => ({ 
           ...prev, 
           ...data,
+          points: Number(data.points) || 0,
           favorites: Array.isArray(data.favorites) ? data.favorites : [],
-          following: Array.isArray(data.following) ? data.following : []
+          following: Array.isArray(data.following) ? data.following : [],
+          hacksCount: Number(data.hacksCount) || 0,
+          totalSavings: Number(data.totalSavings) || 0
         }));
       } else {
-        setDoc(userRef, { points: 50, isPro: false, isVerified: false, username: 'Foodie', avatar: '👤', favorites: [], following: [] });
+        setDoc(userRef, { 
+          points: 50, isPro: false, isVerified: false, 
+          username: 'Foodie', avatar: '👤', favorites: [], 
+          following: [], hacksCount: 0, totalSavings: 0 
+        });
       }
-    }, (err) => console.error("Profile sync error:", err));
+    }, (err) => console.error("Permission error (Profile):", err));
 
     const hacksRef = collection(db, 'artifacts', appId, 'public', 'data', 'hacks');
     const unsubHacks = onSnapshot(hacksRef, (snap) => {
       if (!snap.empty) {
-        setHacks(snap.docs.map(d => ({ ...d.data(), id: d.id })));
+        setHacks(snap.docs.map(d => {
+          const data = d.data();
+          return {
+            ...data,
+            id: d.id,
+            savings: Number(data.savings) || 0,
+            votes: Number(data.votes) || 0
+          };
+        }));
       }
-    }, (err) => console.error("Hacks sync error:", err));
+    }, (err) => console.error("Permission error (Hacks):", err));
 
     return () => { 
       unsubUser(); 
       unsubHacks(); 
     };
-  }, [user]);
+  }, [authReady, user]);
 
-  const userTier = useMemo(() => {
-    return TIERS.find(t => userData.points >= t.minPoints) || TIERS[TIERS.length - 1];
-  }, [userData.points]);
+  const userTier = useMemo(() => TIERS.find(t => (userData.points || 0) >= t.minPoints) || TIERS[TIERS.length - 1], [userData.points]);
 
   const showToastMessage = (msg) => { 
     if (typeof msg !== 'string') return;
@@ -159,28 +179,22 @@ export default function App() {
     setTimeout(() => setToast(''), 3000); 
   };
   
-  const handleVerifyDetails = (e) => {
-    e.preventDefault();
-    setVerifyStep(2);
-  };
-
+  // Version 2 Simple OTP Verification
   const handleVerifyOTP = async (e) => {
     e.preventDefault();
     const userRef = getUserRef();
     if (!userRef) return;
 
     if (otpInput === '1234') {
-      const updates = { 
+      await setDoc(userRef, { 
         isVerified: true, 
-        points: increment(100),
-        ...verifyForm 
-      };
-      await setDoc(userRef, updates, { merge: true });
+        points: increment(100)
+      }, { merge: true });
       setShowVerifyModal(false);
-      setVerifyStep(1);
+      setOtpInput('');
       showToastMessage("Successfully verified! +100 Points");
     } else {
-      showToastMessage("Invalid OTP. Try 1234");
+      showToastMessage("Invalid OTP. Hint: Use 1234");
     }
   };
 
@@ -188,9 +202,7 @@ export default function App() {
     e.preventDefault();
     const userRef = getUserRef();
     if (!userRef) return;
-
-    const updates = { username: editForm.username, avatar: editForm.avatar };
-    await setDoc(userRef, updates, { merge: true });
+    await setDoc(userRef, { username: editForm.username, avatar: editForm.avatar }, { merge: true });
     setShowEditProfileModal(false);
     showToastMessage("Profile updated successfully!");
   };
@@ -198,60 +210,56 @@ export default function App() {
   const handleUpgradePro = async (method) => {
     const userRef = getUserRef();
     if (!userRef) return;
-
     if (method === 'points' && userData.points < 1000) return showToastMessage("Not enough points!");
     const updates = { isPro: true, points: method === 'points' ? increment(-1000) : userData.points };
     await setDoc(userRef, updates, { merge: true });
-    showToastMessage("Welcome to PRO!");
+    showToastMessage("Welcome to PRO! All hacks unlocked.");
   };
 
   const handleToggleFavorite = async (hackId) => {
     const userRef = getUserRef();
     if (!userRef) return;
-
     const isFavorited = userData.favorites?.includes(hackId);
-    await updateDoc(userRef, { 
-      favorites: isFavorited ? arrayRemove(hackId) : arrayUnion(hackId) 
-    });
+    await updateDoc(userRef, { favorites: isFavorited ? arrayRemove(hackId) : arrayUnion(hackId) });
   };
 
   const handleToggleFollow = async (authorName) => {
     const userRef = getUserRef();
     if (!userRef) return;
-
     const isFollowing = userData.following?.includes(authorName);
-    await updateDoc(userRef, { 
-      following: isFollowing ? arrayRemove(authorName) : arrayUnion(authorName) 
-    });
+    await updateDoc(userRef, { following: isFollowing ? arrayRemove(authorName) : arrayUnion(authorName) });
   };
 
   const submitHack = async (e) => {
     e.preventDefault();
     if (!user) return;
     if (!userData.isVerified) return setShowVerifyModal(true);
-    
     const formData = new FormData(e.target);
-    const newHack = {
-      resId: selectedRes.id, 
-      title: formData.get('title'), 
-      desc: formData.get('desc'),
-      savings: Number(formData.get('savings')), 
-      votes: 1, 
-      user: userData.username,
-      avatar: userData.avatar, 
-      createdAt: new Date().toISOString()
-    };
+    const savings = Number(formData.get('savings'));
+    
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'hacks'), {
+      resId: selectedRes.id, title: formData.get('title'), desc: formData.get('desc'),
+      savings: savings, votes: 1, user: userData.username,
+      avatar: userData.avatar, createdAt: serverTimestamp(), authorId: user.uid
+    });
 
-    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'hacks'), newHack);
-    await setDoc(getUserRef(), { points: increment(50) }, { merge: true });
+    await setDoc(getUserRef(), { 
+      points: increment(50),
+      hacksCount: increment(1),
+      totalSavings: increment(savings)
+    }, { merge: true });
+    
     setShowAddHackModal(false);
     showToastMessage("Hack submitted! +50 Points");
   };
 
-  const openNav = (appType, lat, lng) => {
-    if (appType === 'google') window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`);
-    if (appType === 'apple') window.open(`http://maps.apple.com/?daddr=${lat},${lng}`);
-    if (appType === 'waze') window.open(`https://waze.com/ul?ll=${lat},${lng}&navigate=yes`);
+  const openNav = (type, lat, lng) => {
+    const urls = {
+      google: `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
+      apple: `http://maps.apple.com/?daddr=${lat},${lng}`,
+      waze: `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`
+    };
+    window.open(urls[type]);
   };
 
   // --- Views ---
@@ -288,18 +296,22 @@ export default function App() {
 
   const renderMap = () => (
     <div className="flex-1 relative bg-[#E2E8F0] overflow-hidden">
+      {/* Version 2 Mock Map Style */}
       <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-50 mix-blend-multiply"></div>
       <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.05)_1px,transparent_1px)] bg-[size:40px_40px]"></div>
+      
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center">
         <div className="w-16 h-16 bg-blue-500/20 rounded-full animate-ping absolute"></div>
         <div className="w-4 h-4 bg-blue-500 border-2 border-white rounded-full shadow-lg z-10"></div>
       </div>
+
       {restaurants.map(res => (
         <button key={res.id} onClick={() => setSelectedRes(res)} className="absolute flex flex-col items-center group -translate-x-1/2 -translate-y-full z-10 hover:z-20 transition-all duration-300" style={{ top: res.top, left: res.left }}>
           <div className={`p-2 rounded-2xl shadow-xl transition-transform ${selectedRes?.id === res.id ? 'bg-orange-600 text-white scale-110' : 'bg-white text-orange-600 hover:scale-110 border border-slate-200'}`}><span className="text-xl">{res.img}</span></div>
           <span className={`mt-1.5 px-2.5 py-1 bg-white/95 backdrop-blur-sm text-xs font-bold rounded-lg shadow-sm border border-slate-100 transition-opacity whitespace-nowrap ${selectedRes?.id === res.id ? 'opacity-100 text-orange-700' : 'opacity-0 group-hover:opacity-100 text-slate-700'}`}>{res.name}</span>
         </button>
       ))}
+
       {selectedRes && (
         <div className="absolute bottom-4 left-4 right-4 bg-white rounded-3xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] p-5 z-20 animate-in slide-in-from-bottom border border-slate-100">
           <div className="flex justify-between items-start mb-4">
@@ -322,6 +334,28 @@ export default function App() {
       )}
     </div>
   );
+
+  const renderSpots = () => {
+    const filtered = restaurants.filter(r => r.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    return (
+      <div className="flex-1 overflow-y-auto bg-slate-50 p-4">
+        <div className="relative mb-6">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+          <input type="text" placeholder="Search restaurants..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white border border-slate-200 py-3.5 pl-12 pr-4 rounded-2xl font-medium focus:ring-2 focus:ring-orange-500 shadow-sm transition-all" />
+        </div>
+        <h3 className="font-bold text-slate-800 mb-4 px-1">All Spots</h3>
+        <div className="space-y-3">
+          {filtered.map(res => (
+            <div key={res.id} onClick={() => { setSelectedRes(res); setActiveView('restaurant'); }} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 cursor-pointer hover:border-orange-200 transition-colors">
+              <div className="w-14 h-14 bg-orange-50 rounded-xl flex items-center justify-center text-3xl border border-orange-100">{res.img}</div>
+              <div className="flex-1"><h4 className="font-bold text-slate-800 text-lg">{res.name}</h4><p className="text-sm text-slate-500">{res.category}</p></div>
+              <ChevronRight className="text-slate-300" size={20} />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   const renderRestaurant = () => {
     if (!selectedRes) return null;
@@ -383,12 +417,34 @@ export default function App() {
       {!userData.isVerified && (
         <div className="bg-amber-50 rounded-3xl p-6 border border-amber-100 mb-6 flex flex-col"><h4 className="font-black text-amber-900 text-lg mb-2">Verify Account</h4><p className="text-sm text-amber-800/80 mb-4">Earn +100 Points instantly.</p><button onClick={() => setShowVerifyModal(true)} className="py-3 bg-amber-500 text-white font-bold rounded-xl shadow-lg">Verify with OTP</button></div>
       )}
-      <div className="grid grid-cols-2 gap-4"><div className="bg-white p-5 rounded-3xl border"><div className="text-slate-400 mb-1"><Share2 size={24} /></div><div className="text-2xl font-black">{userData.hacksCount || 0}</div><div className="text-xs font-bold text-slate-500">Hacks Posted</div></div><div className="bg-white p-5 rounded-3xl border"><div className="text-green-500 mb-1 font-black text-2xl">₱</div><div className="text-2xl font-black">{userData.totalSavings || 0}</div><div className="text-xs font-bold text-slate-500">Total Savings</div></div></div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-white p-5 rounded-3xl border"><div className="text-slate-400 mb-1"><Share2 size={24} /></div><div className="text-2xl font-black">{userData.hacksCount}</div><div className="text-xs font-bold text-slate-500">Hacks Posted</div></div>
+        <div className="bg-white p-5 rounded-3xl border"><div className="text-green-500 mb-1 font-black text-2xl">₱</div><div className="text-2xl font-black">{userData.totalSavings}</div><div className="text-xs font-bold text-slate-500">Total Savings</div></div>
+      </div>
+    </div>
+  );
+
+  const renderPro = () => (
+    <div className="flex-1 overflow-y-auto bg-slate-900 text-white p-6 relative overflow-hidden">
+      <div className="pt-8 mb-10"><h2 className="text-4xl font-black mb-4">Unlock <span className="text-orange-400">PRO</span></h2><p className="text-slate-400">Get lifetime access to every secret hack.</p></div>
+      {userData.isPro ? (
+        <div className="bg-green-500/10 border border-green-500/30 rounded-3xl p-6 text-center"><CheckCircle size={48} className="text-green-400 mx-auto mb-4" /><h3 className="text-xl font-black">You are PRO!</h3></div>
+      ) : (
+        <div className="space-y-4 relative z-10">
+          <button onClick={() => handleUpgradePro('pay')} className="w-full bg-white text-slate-900 p-5 rounded-3xl font-black text-lg flex justify-between items-center shadow-lg"><span>Pay Once</span><span className="bg-slate-900 text-white px-4 py-2 rounded-xl text-sm">₱35.00</span></button>
+          <button onClick={() => handleUpgradePro('points')} disabled={userData.points < 1000} className={`w-full p-5 rounded-3xl font-black text-lg flex justify-between items-center border-2 ${userData.points >= 1000 ? 'bg-orange-500 border-orange-400 shadow-orange-500/20 shadow-xl' : 'bg-slate-800 border-slate-700 text-slate-500'}`}><span>Redeem Points</span><span className="text-sm">1,000 pts</span></button>
+        </div>
+      )}
     </div>
   );
 
   return (
     <div className="flex flex-col h-screen w-full bg-slate-100 max-w-md mx-auto relative overflow-hidden font-sans">
+      {isDummyConfig && (
+        <div className="bg-red-600 text-white p-4 text-center text-xs font-bold z-[999] shadow-md">
+          ⚠️ URGENT: The app is using placeholder Firebase keys. Please open src/App.jsx on your computer and paste your REAL keys from the Firebase Console to fix the permission errors.
+        </div>
+      )}
       {activeView === 'main' && renderHeader()}
       <main className="flex-1 flex flex-col relative overflow-hidden">
         {activeView === 'restaurant' && renderRestaurant()}
@@ -397,57 +453,28 @@ export default function App() {
         )}
       </main>
       {activeView === 'main' && renderTabBar()}
-      {toast && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-5 py-2.5 rounded-full shadow-2xl z-[200] flex items-center gap-2 border border-slate-700 animate-in fade-in slide-in-from-top-4">
-          <Info size={16} className="text-orange-400" />
-          <p className="font-bold text-sm">{toast}</p>
-        </div>
-      )}
-      {/* Verification Modal (Multi-step) */}
+      {toast && <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-5 py-2.5 rounded-full shadow-2xl z-[200] flex items-center gap-2 border border-slate-700 animate-in fade-in slide-in-from-top-4"><Info size={16} className="text-orange-400" /><p className="font-bold text-sm">{toast}</p></div>}
+      
+      {/* Version 2 Simple Verification Modal */}
       {showVerifyModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
           <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl relative">
-            <button onClick={() => { setShowVerifyModal(false); setVerifyStep(1); }} className="absolute top-6 right-6 p-2 rounded-full"><X size={20} /></button>
-            <div className="text-center mb-6 pt-2">
-              <div className="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100">
-                <ShieldCheck size={32} />
-              </div>
-              <h3 className="text-2xl font-black text-slate-800">Verify Account</h3>
-              <p className="text-xs text-slate-500 font-medium">Step {verifyStep} of 2</p>
-            </div>
-            {verifyStep === 1 ? (
-              <form onSubmit={handleVerifyDetails} className="space-y-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Full Name</label>
-                  <input required value={verifyForm.fullName} onChange={(e) => setVerifyForm({...verifyForm, fullName: e.target.value})} placeholder="Juan Dela Cruz" className="w-full px-4 py-3.5 bg-slate-50 border rounded-xl font-bold outline-none focus:ring-2 focus:ring-blue-500/20" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Email</label>
-                  <input required type="email" value={verifyForm.email} onChange={(e) => setVerifyForm({...verifyForm, email: e.target.value})} placeholder="juan@email.com" className="w-full px-4 py-3.5 bg-slate-50 border rounded-xl font-bold outline-none focus:ring-2 focus:ring-blue-500/20" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Mobile Number</label>
-                  <input required type="tel" value={verifyForm.mobile} onChange={(e) => setVerifyForm({...verifyForm, mobile: e.target.value})} placeholder="0912 345 6789" className="w-full px-4 py-3.5 bg-slate-50 border rounded-xl font-bold outline-none focus:ring-2 focus:ring-blue-500/20" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Date of Birth</label>
-                  <input required type="date" value={verifyForm.dob} onChange={(e) => setVerifyForm({...verifyForm, dob: e.target.value})} className="w-full px-4 py-3.5 bg-slate-50 border rounded-xl font-bold outline-none focus:ring-2 focus:ring-blue-500/20" />
-                </div>
-                <button type="submit" className="w-full py-4 bg-blue-600 text-white font-bold rounded-2xl shadow-lg mt-4">Next: Receive OTP</button>
-              </form>
-            ) : (
-              <form onSubmit={handleVerifyOTP} className="space-y-6">
-                <p className="text-center text-sm text-slate-500">We've sent a code to <br/><span className="font-bold text-slate-800">{verifyForm.mobile}</span></p>
-                <input type="text" maxLength={4} value={otpInput} onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ''))} className="w-full text-center text-3xl tracking-[1em] font-black bg-slate-50 py-4 rounded-2xl outline-none border focus:ring-4 focus:ring-blue-500/10" placeholder="••••" />
-                <button type="submit" className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg">Confirm OTP</button>
-                <div className="flex justify-between px-2">
-                  <button type="button" onClick={() => setVerifyStep(1)} className="text-xs font-bold text-slate-400 uppercase hover:text-blue-500 transition-colors">Back</button>
-                  <p className="text-xs font-bold text-slate-400 uppercase">Hint: Use code 1234</p>
-                </div>
-              </form>
-            )}
+            <button onClick={() => setShowVerifyModal(false)} className="absolute top-6 right-6 p-2 rounded-full"><X size={20} /></button>
+            <h3 className="text-2xl font-black text-center mb-8">Verify Account</h3>
+            <form onSubmit={handleVerifyOTP} className="space-y-6">
+              <input type="text" maxLength={4} value={otpInput} onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ''))} className="w-full text-center text-3xl tracking-[1em] font-black bg-slate-50 py-4 rounded-2xl outline-none border focus:ring-4 focus:ring-blue-500/10" placeholder="••••" />
+              <button type="submit" className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg">Confirm OTP</button>
+              <p className="text-center text-xs font-bold text-slate-400">Hint: Use code 1234</p>
+            </form>
           </div>
         </div>
+      )}
+      
+      {showAddHackModal && (
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in"><div className="bg-white w-full max-w-md sm:rounded-[32px] rounded-t-[32px] p-6 pt-8 shadow-2xl relative max-h-[90vh] flex flex-col animate-in slide-in-from-bottom"><button onClick={() => setShowAddHackModal(false)} className="absolute top-6 right-6 p-2 rounded-full"><X size={20} /></button><h3 className="text-2xl font-black mb-6">Share a Hack</h3><form onSubmit={submitHack} className="space-y-4"><div><label className="text-xs font-bold text-slate-500 uppercase">Title</label><input required name="title" className="w-full bg-slate-50 px-4 py-3.5 rounded-2xl font-bold border" /></div><div><label className="text-xs font-bold text-slate-500 uppercase">Description</label><textarea required name="desc" rows={3} className="w-full bg-slate-50 px-4 py-3.5 rounded-2xl border"></textarea></div><div><label className="text-xs font-bold text-slate-500 uppercase">Savings (₱)</label><input required name="savings" type="number" className="w-full bg-slate-50 px-4 py-3.5 rounded-2xl font-black border" /></div><button type="submit" className="w-full py-4 bg-orange-500 text-white font-black rounded-xl shadow-lg">Submit & Earn +50 Pts</button></form></div></div>
+      )}
+      {showEditProfileModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md animate-in fade-in"><div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl relative animate-in zoom-in-95"><button onClick={() => setShowEditProfileModal(false)} className="absolute top-6 right-6 p-2 rounded-full"><X size={20} /></button><h3 className="text-2xl font-black mb-6">Edit Profile</h3><form onSubmit={handleUpdateProfile} className="space-y-4"><div><label className="text-xs font-bold text-slate-500 uppercase">Username</label><input required value={editForm.username} onChange={(e) => setEditForm(prev => ({ ...prev, username: e.target.value }))} className="w-full bg-slate-50 px-4 py-3.5 rounded-2xl font-bold border" /></div><div className="grid grid-cols-5 gap-2">{['👤', '🍔', '🍕', '🍗', '🍟', '🧋', '☕', '🍩', '🌮', '🍦'].map(emoji => (<button key={emoji} type="button" onClick={() => setEditForm(prev => ({ ...prev, avatar: emoji }))} className={`text-2xl p-2 rounded-xl border transition-all ${editForm.avatar === emoji ? 'bg-orange-100 border-orange-500 scale-110' : 'bg-slate-50'}`}>{emoji}</button>))}</div><button type="submit" className="w-full py-4 bg-orange-500 text-white font-black rounded-xl">Save Changes</button></form></div></div>
       )}
     </div>
   );
