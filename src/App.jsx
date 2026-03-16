@@ -9,11 +9,10 @@ import {
 import { 
   MapPin, Utensils, User, Lock, Search, Plus, ArrowUpCircle, 
   Coffee, Pizza, X, Navigation2, Map as MapIcon, Car, List, 
-  ShieldCheck, Star, Zap, Award, CheckCircle, ChevronRight, Share2, Info, Heart, Edit, Crown
+  ShieldCheck, Star, Zap, Award, CheckCircle, ChevronRight, Share2, Info, Heart, Edit, Crown, Phone, Mail, Calendar
 } from 'lucide-react';
 
 // --- Firebase Configuration ---
-// RULE: Sanitized getFirebaseConfig helper to handle both environmental and local fallback
 const getFirebaseConfig = () => {
   if (typeof __firebase_config !== 'undefined' && __firebase_config) {
     try {
@@ -37,7 +36,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// RULE 1: Sanitize appId to prevent path segment count errors in Firestore
+// RULE 1: Sanitize appId
 const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'tipid-menu-default';
 const appId = rawAppId.replace(/\//g, '_');
 
@@ -72,16 +71,21 @@ const TIERS = [
 export default function App() {
   const [user, setUser] = useState(null);
   const [userData, setUserData] = useState({ 
-    points: 50, isPro: false, isVerified: false, username: 'Foodie', avatar: '👤', favorites: [], following: []
+    points: 50, isPro: false, isVerified: false, username: 'Foodie', avatar: '👤', favorites: [], following: [],
+    fullName: '', email: '', mobile: '', dob: ''
   });
-  const [restaurants, setRestaurants] = useState(MOCK_RESTAURANTS);
+  const [restaurants] = useState(MOCK_RESTAURANTS);
   const [hacks, setHacks] = useState(MOCK_HACKS);
-  const [promos, setPromos] = useState(MOCK_PROMOS);
+  const [promos] = useState(MOCK_PROMOS);
   
   const [currentTab, setCurrentTab] = useState('map');
   const [activeView, setActiveView] = useState('main');
   const [selectedRes, setSelectedRes] = useState(null);
+  
   const [showVerifyModal, setShowVerifyModal] = useState(false);
+  const [verifyStep, setVerifyStep] = useState(1);
+  const [verifyForm, setVerifyForm] = useState({ fullName: '', email: '', mobile: '', dob: '' });
+  
   const [showAddHackModal, setShowAddHackModal] = useState(false);
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [otpInput, setOtpInput] = useState('');
@@ -89,7 +93,13 @@ export default function App() {
   const [editForm, setEditForm] = useState({ username: '', avatar: '' });
   const [toast, setToast] = useState('');
 
-  // RULE 3: Auth Before Queries
+  // Helper to derive the user document reference safely
+  const getUserRef = () => {
+    if (!user?.uid) return null;
+    return doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
+  };
+
+  // Auth Initialization
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -99,7 +109,7 @@ export default function App() {
           await signInAnonymously(auth);
         }
       } catch (err) {
-        console.error("Authentication failed", err);
+        console.error("Auth failed", err);
       }
     };
     initAuth();
@@ -107,16 +117,14 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // RULE 3 & Critical Req: Sync data with error callbacks and auth checks
+  // Data Fetching with defensive guards
   useEffect(() => {
-    if (!user || !db) return;
+    if (!user?.uid || !db) return;
 
-    // RULE 1: Sync Profile Path
-    const userRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
+    const userRef = getUserRef();
     const unsubUser = onSnapshot(userRef, (snap) => {
       if (snap.exists()) {
         const data = snap.data();
-        // Ensure lists are clean arrays
         setUserData(prev => ({ 
           ...prev, 
           ...data,
@@ -128,7 +136,6 @@ export default function App() {
       }
     }, (err) => console.error("Profile sync error:", err));
 
-    // RULE 1: Sync Public Hacks Path
     const hacksRef = collection(db, 'artifacts', appId, 'public', 'data', 'hacks');
     const unsubHacks = onSnapshot(hacksRef, (snap) => {
       if (!snap.empty) {
@@ -142,70 +149,87 @@ export default function App() {
     };
   }, [user]);
 
-  const userTier = TIERS.find(t => userData.points >= t.minPoints) || TIERS[TIERS.length - 1];
-  
+  const userTier = useMemo(() => {
+    return TIERS.find(t => userData.points >= t.minPoints) || TIERS[TIERS.length - 1];
+  }, [userData.points]);
+
   const showToastMessage = (msg) => { 
     if (typeof msg !== 'string') return;
     setToast(msg); 
     setTimeout(() => setToast(''), 3000); 
   };
   
+  const handleVerifyDetails = (e) => {
+    e.preventDefault();
+    setVerifyStep(2);
+  };
+
   const handleVerifyOTP = async (e) => {
     e.preventDefault();
-    if (!user) return;
+    const userRef = getUserRef();
+    if (!userRef) return;
+
     if (otpInput === '1234') {
-      const updates = { isVerified: true, points: userData.points + 100 };
-      setUserData(prev => ({ ...prev, ...updates }));
-      const userRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
+      const updates = { 
+        isVerified: true, 
+        points: increment(100),
+        ...verifyForm 
+      };
       await setDoc(userRef, updates, { merge: true });
       setShowVerifyModal(false);
+      setVerifyStep(1);
       showToastMessage("Successfully verified! +100 Points");
     } else {
-      showToastMessage("Invalid OTP. Hint: Use 1234");
+      showToastMessage("Invalid OTP. Try 1234");
     }
   };
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
-    if (!user) return;
+    const userRef = getUserRef();
+    if (!userRef) return;
+
     const updates = { username: editForm.username, avatar: editForm.avatar };
-    setUserData(prev => ({ ...prev, ...updates }));
-    const userRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
     await setDoc(userRef, updates, { merge: true });
     setShowEditProfileModal(false);
     showToastMessage("Profile updated successfully!");
   };
 
   const handleUpgradePro = async (method) => {
-    if (!user) return;
+    const userRef = getUserRef();
+    if (!userRef) return;
+
     if (method === 'points' && userData.points < 1000) return showToastMessage("Not enough points!");
-    const updates = { isPro: true, points: method === 'points' ? userData.points - 1000 : userData.points };
-    setUserData(prev => ({ ...prev, ...updates }));
-    const userRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
+    const updates = { isPro: true, points: method === 'points' ? increment(-1000) : userData.points };
     await setDoc(userRef, updates, { merge: true });
-    showToastMessage("Welcome to PRO! All hacks unlocked.");
+    showToastMessage("Welcome to PRO!");
   };
 
   const handleToggleFavorite = async (hackId) => {
-    if (!user) return;
+    const userRef = getUserRef();
+    if (!userRef) return;
+
     const isFavorited = userData.favorites?.includes(hackId);
-    const updates = { favorites: isFavorited ? arrayRemove(hackId) : arrayUnion(hackId) };
-    const userRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
-    await updateDoc(userRef, updates);
+    await updateDoc(userRef, { 
+      favorites: isFavorited ? arrayRemove(hackId) : arrayUnion(hackId) 
+    });
   };
 
   const handleToggleFollow = async (authorName) => {
-    if (!user) return;
+    const userRef = getUserRef();
+    if (!userRef) return;
+
     const isFollowing = userData.following?.includes(authorName);
-    const updates = { following: isFollowing ? arrayRemove(authorName) : arrayUnion(authorName) };
-    const userRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
-    await updateDoc(userRef, updates);
+    await updateDoc(userRef, { 
+      following: isFollowing ? arrayRemove(authorName) : arrayUnion(authorName) 
+    });
   };
 
   const submitHack = async (e) => {
     e.preventDefault();
     if (!user) return;
     if (!userData.isVerified) return setShowVerifyModal(true);
+    
     const formData = new FormData(e.target);
     const newHack = {
       resId: selectedRes.id, 
@@ -218,11 +242,8 @@ export default function App() {
       createdAt: new Date().toISOString()
     };
 
-    const hacksRef = collection(db, 'artifacts', appId, 'public', 'data', 'hacks');
-    await addDoc(hacksRef, newHack);
-    const userRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
-    await setDoc(userRef, { points: increment(50) }, { merge: true });
-
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'hacks'), newHack);
+    await setDoc(getUserRef(), { points: increment(50) }, { merge: true });
     setShowAddHackModal(false);
     showToastMessage("Hack submitted! +50 Points");
   };
@@ -233,6 +254,7 @@ export default function App() {
     if (appType === 'waze') window.open(`https://waze.com/ul?ll=${lat},${lng}&navigate=yes`);
   };
 
+  // --- Views ---
   const renderHeader = () => (
     <header className="bg-white px-5 py-4 shadow-sm z-20 flex justify-between items-center sticky top-0">
       <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-amber-500 italic">Tipid Menu</h1>
@@ -301,28 +323,6 @@ export default function App() {
     </div>
   );
 
-  const renderSpots = () => {
-    const filtered = restaurants.filter(r => r.name.toLowerCase().includes(searchQuery.toLowerCase()));
-    return (
-      <div className="flex-1 overflow-y-auto bg-slate-50 p-4">
-        <div className="relative mb-6">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-          <input type="text" placeholder="Search restaurants..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white border border-slate-200 py-3.5 pl-12 pr-4 rounded-2xl font-medium focus:ring-2 focus:ring-orange-500 shadow-sm transition-all" />
-        </div>
-        <h3 className="font-bold text-slate-800 mb-4 px-1">All Spots</h3>
-        <div className="space-y-3">
-          {filtered.map(res => (
-            <div key={res.id} onClick={() => { setSelectedRes(res); setActiveView('restaurant'); }} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 cursor-pointer hover:border-orange-200 transition-colors">
-              <div className="w-14 h-14 bg-orange-50 rounded-xl flex items-center justify-center text-3xl border border-orange-100">{res.img}</div>
-              <div className="flex-1"><h4 className="font-bold text-slate-800 text-lg">{res.name}</h4><p className="text-sm text-slate-500">{res.category}</p></div>
-              <ChevronRight className="text-slate-300" size={20} />
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
   const renderRestaurant = () => {
     if (!selectedRes) return null;
     const resPromos = promos.filter(p => p.resId === selectedRes.id);
@@ -383,21 +383,7 @@ export default function App() {
       {!userData.isVerified && (
         <div className="bg-amber-50 rounded-3xl p-6 border border-amber-100 mb-6 flex flex-col"><h4 className="font-black text-amber-900 text-lg mb-2">Verify Account</h4><p className="text-sm text-amber-800/80 mb-4">Earn +100 Points instantly.</p><button onClick={() => setShowVerifyModal(true)} className="py-3 bg-amber-500 text-white font-bold rounded-xl shadow-lg">Verify with OTP</button></div>
       )}
-      <div className="grid grid-cols-2 gap-4"><div className="bg-white p-5 rounded-3xl border"><div className="text-slate-400 mb-1"><Share2 size={24} /></div><div className="text-2xl font-black">{userData.hacksCount || 0}</div><div className="text-xs font-bold text-slate-500">Hacks Posted</div></div><div className="bg-white p-5 rounded-3xl border"><div className="text-green-500 mb-1 font-black text-2xl">₱</div><div className="text-2xl font-black">0</div><div className="text-xs font-bold text-slate-500">Total Savings</div></div></div>
-    </div>
-  );
-
-  const renderPro = () => (
-    <div className="flex-1 overflow-y-auto bg-slate-900 text-white p-6 relative overflow-hidden">
-      <div className="pt-8 mb-10"><h2 className="text-4xl font-black mb-4">Unlock <span className="text-orange-400">PRO</span></h2><p className="text-slate-400">Get lifetime access to every secret hack.</p></div>
-      {userData.isPro ? (
-        <div className="bg-green-500/10 border border-green-500/30 rounded-3xl p-6 text-center"><CheckCircle size={48} className="text-green-400 mx-auto mb-4" /><h3 className="text-xl font-black">You are PRO!</h3></div>
-      ) : (
-        <div className="space-y-4 relative z-10">
-          <button onClick={() => handleUpgradePro('pay')} className="w-full bg-white text-slate-900 p-5 rounded-3xl font-black text-lg flex justify-between items-center shadow-lg"><span>Pay Once</span><span className="bg-slate-900 text-white px-4 py-2 rounded-xl text-sm">₱35.00</span></button>
-          <button onClick={() => handleUpgradePro('points')} disabled={userData.points < 1000} className={`w-full p-5 rounded-3xl font-black text-lg flex justify-between items-center border-2 ${userData.points >= 1000 ? 'bg-orange-500 border-orange-400 shadow-orange-500/20 shadow-xl' : 'bg-slate-800 border-slate-700 text-slate-500'}`}><span>Redeem Points</span><span className="text-sm">1,000 pts</span></button>
-        </div>
-      )}
+      <div className="grid grid-cols-2 gap-4"><div className="bg-white p-5 rounded-3xl border"><div className="text-slate-400 mb-1"><Share2 size={24} /></div><div className="text-2xl font-black">{userData.hacksCount || 0}</div><div className="text-xs font-bold text-slate-500">Hacks Posted</div></div><div className="bg-white p-5 rounded-3xl border"><div className="text-green-500 mb-1 font-black text-2xl">₱</div><div className="text-2xl font-black">{userData.totalSavings || 0}</div><div className="text-xs font-bold text-slate-500">Total Savings</div></div></div>
     </div>
   );
 
@@ -411,15 +397,57 @@ export default function App() {
         )}
       </main>
       {activeView === 'main' && renderTabBar()}
-      {toast && <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-5 py-2.5 rounded-full shadow-2xl z-[200] flex items-center gap-2 border border-slate-700 animate-in fade-in slide-in-from-top-4"><Info size={16} className="text-orange-400" /><p className="font-bold text-sm">{toast}</p></div>}
+      {toast && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-5 py-2.5 rounded-full shadow-2xl z-[200] flex items-center gap-2 border border-slate-700 animate-in fade-in slide-in-from-top-4">
+          <Info size={16} className="text-orange-400" />
+          <p className="font-bold text-sm">{toast}</p>
+        </div>
+      )}
+      {/* Verification Modal (Multi-step) */}
       {showVerifyModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md animate-in fade-in"><div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl relative"><button onClick={() => setShowVerifyModal(false)} className="absolute top-6 right-6 p-2 rounded-full"><X size={20} /></button><h3 className="text-2xl font-black text-center mb-8">Verify Account</h3><form onSubmit={handleVerifyOTP} className="space-y-6"><input type="text" maxLength={4} value={otpInput} onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ''))} className="w-full text-center text-3xl tracking-[1em] font-black bg-slate-50 py-4 rounded-2xl outline-none border focus:ring-4 focus:ring-blue-500/10" placeholder="••••" /><button type="submit" className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg">Confirm OTP</button><p className="text-center text-xs font-bold text-slate-400">Hint: Use code 1234</p></form></div></div>
-      )}
-      {showAddHackModal && (
-        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in"><div className="bg-white w-full max-w-md sm:rounded-[32px] rounded-t-[32px] p-6 pt-8 shadow-2xl relative max-h-[90vh] flex flex-col animate-in slide-in-from-bottom"><button onClick={() => setShowAddHackModal(false)} className="absolute top-6 right-6 p-2 rounded-full"><X size={20} /></button><h3 className="text-2xl font-black mb-6">Share a Hack</h3><form onSubmit={submitHack} className="space-y-4"><div><label className="text-xs font-bold text-slate-500 uppercase">Title</label><input required name="title" className="w-full bg-slate-50 px-4 py-3.5 rounded-2xl font-bold border" /></div><div><label className="text-xs font-bold text-slate-500 uppercase">Description</label><textarea required name="desc" rows={3} className="w-full bg-slate-50 px-4 py-3.5 rounded-2xl border"></textarea></div><div><label className="text-xs font-bold text-slate-500 uppercase">Savings (₱)</label><input required name="savings" type="number" className="w-full bg-slate-50 px-4 py-3.5 rounded-2xl font-black border" /></div><button type="submit" className="w-full py-4 bg-orange-500 text-white font-black rounded-xl shadow-lg">Submit & Earn +50 Pts</button></form></div></div>
-      )}
-      {showEditProfileModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md animate-in fade-in"><div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl relative animate-in zoom-in-95"><button onClick={() => setShowEditProfileModal(false)} className="absolute top-6 right-6 p-2 rounded-full"><X size={20} /></button><h3 className="text-2xl font-black mb-6">Edit Profile</h3><form onSubmit={handleUpdateProfile} className="space-y-4"><div><label className="text-xs font-bold text-slate-500 uppercase">Username</label><input required value={editForm.username} onChange={(e) => setEditForm(prev => ({ ...prev, username: e.target.value }))} className="w-full bg-slate-50 px-4 py-3.5 rounded-2xl font-bold border" /></div><div className="grid grid-cols-5 gap-2">{['👤', '🍔', '🍕', '🍗', '🍟', '🧋', '☕', '🍩', '🌮', '🍦'].map(emoji => (<button key={emoji} type="button" onClick={() => setEditForm(prev => ({ ...prev, avatar: emoji }))} className={`text-2xl p-2 rounded-xl border transition-all ${editForm.avatar === emoji ? 'bg-orange-100 border-orange-500 scale-110' : 'bg-slate-50'}`}>{emoji}</button>))}</div><button type="submit" className="w-full py-4 bg-orange-500 text-white font-black rounded-xl">Save Changes</button></form></div></div>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl relative">
+            <button onClick={() => { setShowVerifyModal(false); setVerifyStep(1); }} className="absolute top-6 right-6 p-2 rounded-full"><X size={20} /></button>
+            <div className="text-center mb-6 pt-2">
+              <div className="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100">
+                <ShieldCheck size={32} />
+              </div>
+              <h3 className="text-2xl font-black text-slate-800">Verify Account</h3>
+              <p className="text-xs text-slate-500 font-medium">Step {verifyStep} of 2</p>
+            </div>
+            {verifyStep === 1 ? (
+              <form onSubmit={handleVerifyDetails} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Full Name</label>
+                  <input required value={verifyForm.fullName} onChange={(e) => setVerifyForm({...verifyForm, fullName: e.target.value})} placeholder="Juan Dela Cruz" className="w-full px-4 py-3.5 bg-slate-50 border rounded-xl font-bold outline-none focus:ring-2 focus:ring-blue-500/20" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Email</label>
+                  <input required type="email" value={verifyForm.email} onChange={(e) => setVerifyForm({...verifyForm, email: e.target.value})} placeholder="juan@email.com" className="w-full px-4 py-3.5 bg-slate-50 border rounded-xl font-bold outline-none focus:ring-2 focus:ring-blue-500/20" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Mobile Number</label>
+                  <input required type="tel" value={verifyForm.mobile} onChange={(e) => setVerifyForm({...verifyForm, mobile: e.target.value})} placeholder="0912 345 6789" className="w-full px-4 py-3.5 bg-slate-50 border rounded-xl font-bold outline-none focus:ring-2 focus:ring-blue-500/20" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Date of Birth</label>
+                  <input required type="date" value={verifyForm.dob} onChange={(e) => setVerifyForm({...verifyForm, dob: e.target.value})} className="w-full px-4 py-3.5 bg-slate-50 border rounded-xl font-bold outline-none focus:ring-2 focus:ring-blue-500/20" />
+                </div>
+                <button type="submit" className="w-full py-4 bg-blue-600 text-white font-bold rounded-2xl shadow-lg mt-4">Next: Receive OTP</button>
+              </form>
+            ) : (
+              <form onSubmit={handleVerifyOTP} className="space-y-6">
+                <p className="text-center text-sm text-slate-500">We've sent a code to <br/><span className="font-bold text-slate-800">{verifyForm.mobile}</span></p>
+                <input type="text" maxLength={4} value={otpInput} onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ''))} className="w-full text-center text-3xl tracking-[1em] font-black bg-slate-50 py-4 rounded-2xl outline-none border focus:ring-4 focus:ring-blue-500/10" placeholder="••••" />
+                <button type="submit" className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg">Confirm OTP</button>
+                <div className="flex justify-between px-2">
+                  <button type="button" onClick={() => setVerifyStep(1)} className="text-xs font-bold text-slate-400 uppercase hover:text-blue-500 transition-colors">Back</button>
+                  <p className="text-xs font-bold text-slate-400 uppercase">Hint: Use code 1234</p>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
