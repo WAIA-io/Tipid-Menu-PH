@@ -28,29 +28,6 @@ Backend/DB: Firebase (Auth & Firestore)
 
 Bundler: Vite
 
-📦 Getting Started
-
-Clone the repository:
-
-git clone [https://github.com/your-username/tipid-menu-ph.git](https://github.com/your-username/tipid-menu-ph.git)
-cd tipid-menu-ph
-
-
-Install dependencies:
-
-npm install
-
-
-Run in development mode:
-
-npm run dev
-
-
-Build for production:
-
-npm run build
-
-
 🛡️ License
 
 Distributed under the MIT License. See LICENSE for more information.
