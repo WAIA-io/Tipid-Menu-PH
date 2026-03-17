@@ -6,7 +6,7 @@ import {
   MapPin, Map as MapIcon, Navigation2, Car, Shield, Check, Trash2, Ban,
   AlertTriangle, BarChart3, Settings, MessageSquare, Pin, Megaphone,
   TrendingUp, EyeOff, AlertOctagon, Bell, Users, Activity,
-  FileSpreadsheet, FileCode2
+  FileSpreadsheet, FileCode2, Store, LogOut, Trophy
 } from 'lucide-react';
 
 // --- Mock Data ---
@@ -46,7 +46,7 @@ export default function App() {
   
   // User Data State (In-Memory)
   const [userData, setUserData] = useState({ 
-    points: 50, isPro: false, isVerified: false, username: 'Foodie', avatar: '👤', favorites: [], following: [], hacksCount: 0, totalSavings: 0, isAdmin: true
+    points: 50, isPro: false, isVerified: false, username: 'Foodie', avatar: '👤', favorites: [], following: [], hacksCount: 0, totalSavings: 0, isAdmin: false
   });
   
   // App Data State
@@ -60,9 +60,13 @@ export default function App() {
     { id: '001', username: 'PinoyEater', email: 'pinoy@eater.com', isVerified: true, status: 'active', joined: '2023-10-12', points: 1200, warnings: 0, posts: 12, lastLogin: '2026-03-17' },
     { id: '002', username: 'HackMaster', email: 'master@hack.com', isVerified: true, status: 'active', joined: '2023-11-05', points: 300, warnings: 1, posts: 5, lastLogin: '2026-03-16' },
     { id: '003', username: 'SpamBot99', email: 'spam@bot.com', isVerified: false, status: 'shadowbanned', joined: '2024-01-20', points: 0, warnings: 3, posts: 0, lastLogin: '2026-02-10' },
+    { id: '004', username: 'InactiveJoe', email: 'joe@inactive.com', isVerified: false, status: 'inactive', joined: '2023-05-10', points: 50, warnings: 0, posts: 0, lastLogin: '2023-06-01' },
   ]);
   const [businessRequests, setBusinessRequests] = useState([
     { id: 'b1', restaurant: 'Jollibee BGC', user: 'Jollibee_Admin', email: 'admin@jfc.com', status: 'pending', date: '2024-02-15' }
+  ]);
+  const [activeBusinesses, setActiveBusinesses] = useState([
+    { id: 'ab1', restaurant: "McDonald's Makati Ave", email: 'mcdomakati@ph.com', views: 1250, promosActive: 1 }
   ]);
   const [reportsList, setReportsList] = useState([
     { id: 'r1', targetId: 'h2', type: 'Hack', reason: "Misleading info, doesn't work anymore.", reportedBy: 'AngryUser12', status: 'pending' },
@@ -76,9 +80,11 @@ export default function App() {
     autoApproveHacks: false,
     maintenanceMode: false,
     requireOTP: true,
+    dailyPostLimit: 5,
+    rewardMultiplier: 1,
   });
 
-  const [adminTab, setAdminTab] = useState('overview');
+  const [adminTab, setAdminTab] = useState('dashboard');
   const [adminSearch, setAdminSearch] = useState('');
 
   // Navigation & UI State
@@ -112,16 +118,14 @@ export default function App() {
     setTimeout(() => setToast(''), 3000); 
   };
 
+  // --- XML & CSV Export ---
   const exportCSV = () => {
     const headers = ['ID', 'Name', 'Email', 'Status', 'Verified', 'Posts', 'Last Login'];
     const rows = usersList.map(u => [
       u.id, u.username, u.email, u.status, String(u.isVerified).toUpperCase(), u.posts || 0, u.lastLogin || u.joined
     ]);
     
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + headers.join(',') + '\n' 
-      + rows.map(e => e.join(',')).join('\n');
-    
+    const csvContent = "data:text/csv;charset=utf-8," + headers.join(',') + '\n' + rows.map(e => e.join(',')).join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -157,11 +161,12 @@ export default function App() {
     showToastMessage("XML data structure exported successfully!");
   };
 
+  // --- Secret Admin Handlers ---
   const handleLogoTap = () => {
     logoTapCount.current += 1;
     if (logoTapTimeout.current) clearTimeout(logoTapTimeout.current);
 
-    if (logoTapCount.current >= 5) {
+    if (logoTapCount.current >= 10) {
       logoTapCount.current = 0;
       setShowAdminAuthModal(true);
     } else {
@@ -176,6 +181,7 @@ export default function App() {
     if (adminPasswordInput === 'foodhacks101') {
       setShowAdminAuthModal(false);
       setAdminPasswordInput('');
+      setUserData(prev => ({ ...prev, isAdmin: true }));
       setActiveView('admin');
       showToastMessage("Super Admin Access Granted.");
     } else {
@@ -184,6 +190,15 @@ export default function App() {
     }
   };
 
+  const handleAdminLogout = () => {
+    if (window.confirm("Are you sure you want to log out of the Admin Panel?")) {
+      setUserData(prev => ({ ...prev, isAdmin: false }));
+      setActiveView('main');
+      showToastMessage("Logged out of Admin Panel.");
+    }
+  };
+
+  // --- Core Handlers ---
   const handleGuestLogin = () => {
     setAppState('main');
     showToastMessage("Welcome, Guest!");
@@ -211,9 +226,7 @@ export default function App() {
       setShowVerifyModal(false);
       setOtpInput('');
       showToastMessage("Verified! +100 Points");
-    } else {
-      showToastMessage("Invalid OTP. Hint: Use 1234");
-    }
+    } else showToastMessage("Invalid OTP. Hint: Use 1234");
   };
 
   const handleUpdateProfile = (e) => {
@@ -227,8 +240,7 @@ export default function App() {
     e.preventDefault();
     if (!userData.isVerified && appSettings.requireOTP) {
       setShowAddHackModal(false);
-      setShowVerifyModal(true);
-      return;
+      return setShowVerifyModal(true);
     }
     
     const formData = new FormData(e.target);
@@ -253,6 +265,7 @@ export default function App() {
     showToastMessage(appSettings.autoApproveHacks ? "Hack published! +50 Points" : "Hack submitted for review! +50 Points");
   };
 
+  // --- Advanced Admin Handlers ---
   const adminTogglePin = (id) => {
     setHacks(prev => prev.map(h => h.id === id ? { ...h, isPinned: !h.isPinned } : h));
     showToastMessage("Pin status updated.");
@@ -275,11 +288,8 @@ export default function App() {
 
   const adminResolveReport = (id, action) => {
     setReportsList(prev => prev.map(r => r.id === id ? { ...r, status: 'resolved' } : r));
-    if (action === 'delete') {
-      showToastMessage("Content deleted and report resolved.");
-    } else {
-      showToastMessage("Report dismissed.");
-    }
+    if (action === 'delete') showToastMessage("Content deleted and report resolved.");
+    else showToastMessage("Report dismissed.");
   };
 
   const sendBroadcast = (e) => {
@@ -294,43 +304,25 @@ export default function App() {
     showToastMessage("Setting updated.");
   };
 
+  const updateSettingValue = (key, value) => {
+    setAppSettings(prev => ({ ...prev, [key]: value }));
+  };
+
   const openNav = (type, lat, lng) => {
-    const urls = { 
-      google: `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, 
-      apple: `http://maps.apple.com/?daddr=${lat},${lng}`, 
-      waze: `https://waze.com/ul?ll=${lat},${lng}&navigate=yes` 
-    };
+    const urls = { google: `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, apple: `http://maps.apple.com/?daddr=${lat},${lng}`, waze: `https://waze.com/ul?ll=${lat},${lng}&navigate=yes` };
     window.open(urls[type]);
   };
 
   const handleUpgradePro = (method) => {
     if (method === 'points' && userData.points < 1000) return showToastMessage("Not enough points!");
-    
-    setUserData(prev => ({ 
-      ...prev, 
-      isPro: true, 
-      points: method === 'points' ? prev.points - 1000 : prev.points 
-    }));
+    setUserData(prev => ({ ...prev, isPro: true, points: method === 'points' ? prev.points - 1000 : prev.points }));
     showToastMessage("Welcome to PRO! All hacks unlocked.");
   };
 
   const handleToggleFavorite = (hackId) => {
     setUserData(prev => {
       const isFavorited = prev.favorites.includes(hackId);
-      return {
-        ...prev,
-        favorites: isFavorited ? prev.favorites.filter(id => id !== hackId) : [...prev.favorites, hackId]
-      };
-    });
-  };
-
-  const handleToggleFollow = (authorName) => {
-    setUserData(prev => {
-      const isFollowing = prev.following.includes(authorName);
-      return {
-        ...prev,
-        following: isFollowing ? prev.following.filter(name => name !== authorName) : [...prev.following, authorName]
-      };
+      return { ...prev, favorites: isFavorited ? prev.favorites.filter(id => id !== hackId) : [...prev.favorites, hackId] };
     });
   };
 
@@ -374,8 +366,9 @@ export default function App() {
     showToastMessage("User Account Deleted.");
   };
 
-  const adminApproveBusiness = (id) => {
-    setBusinessRequests(prev => prev.map(b => b.id === id ? { ...b, status: 'approved' } : b));
+  const adminApproveBusiness = (req) => {
+    setBusinessRequests(prev => prev.filter(b => b.id !== req.id));
+    setActiveBusinesses(prev => [...prev, { id: req.id, restaurant: req.restaurant, email: req.email, views: 0, promosActive: 0 }]);
     showToastMessage("Business Claim Approved!");
   };
 
@@ -422,15 +415,8 @@ export default function App() {
               </button>
             </div>
             
-            <div className="flex items-center gap-4 my-2">
-              <div className="h-px bg-slate-100 flex-1"></div>
-              <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">OR</span>
-              <div className="h-px bg-slate-100 flex-1"></div>
-            </div>
-            
-            <button type="button" onClick={handleGuestLogin} className="w-full py-4 bg-slate-50 text-slate-600 font-black rounded-2xl border border-slate-200 uppercase text-xs tracking-widest hover:bg-slate-100 active:scale-95 transition-all">
-              Continue as Guest
-            </button>
+            <div className="flex items-center gap-4 my-2"><div className="h-px bg-slate-100 flex-1"></div><span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">OR</span><div className="h-px bg-slate-100 flex-1"></div></div>
+            <button type="button" onClick={handleGuestLogin} className="w-full py-4 bg-slate-50 text-slate-600 font-black rounded-2xl border border-slate-200 uppercase text-xs tracking-widest hover:bg-slate-100 active:scale-95 transition-all">Continue as Guest</button>
           </form>
         </div>
       </div>
@@ -443,12 +429,17 @@ export default function App() {
 
     const pendingHacksCount = hacks.filter(h => h.status === 'pending').length;
     const pendingReportsCount = reportsList.filter(r => r.status === 'pending').length;
+    const pendingBusinessCount = businessRequests.filter(b => b.status === 'pending').length;
+
+    const activeUsersCount = usersList.filter(u => u.status === 'active').length;
+    const inactiveUsersCount = usersList.filter(u => u.status === 'inactive').length;
 
     const adminNavTabs = [
-      { id: 'overview', icon: Activity, label: 'Overview' },
-      { id: 'hacks', icon: Utensils, label: `Hacks (${pendingHacksCount})` },
+      { id: 'dashboard', icon: Activity, label: 'Dashboard' },
       { id: 'users', icon: Users, label: 'Users' },
+      { id: 'hacks', icon: Utensils, label: `Hacks (${pendingHacksCount})` },
       { id: 'reports', icon: AlertTriangle, label: `Reports (${pendingReportsCount})` },
+      { id: 'business', icon: Store, label: `Business (${pendingBusinessCount})` },
       { id: 'messages', icon: MessageSquare, label: 'Messages' },
       { id: 'analytics', icon: BarChart3, label: 'Analytics' },
       { id: 'settings', icon: Settings, label: 'Settings' }
@@ -459,7 +450,10 @@ export default function App() {
         <div className="bg-slate-900 pt-10 pb-4 shadow-xl z-20 flex-shrink-0">
           <div className="flex justify-between items-center text-white px-5 mb-6">
             <h2 className="text-xl font-black flex items-center gap-2"><Shield size={24} className="text-orange-500"/> Command Center</h2>
-            <button onClick={() => setActiveView('main')} className="p-2 bg-slate-800 rounded-full hover:bg-red-500 hover:text-white transition-colors"><X size={20}/></button>
+            <div className="flex gap-2">
+              <button onClick={() => setActiveView('main')} className="p-2 bg-slate-800 rounded-full hover:bg-slate-700 transition-colors" title="Back to App"><X size={20}/></button>
+              <button onClick={handleAdminLogout} className="p-2 bg-red-500/20 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-colors" title="Sign Out of Admin"><LogOut size={20}/></button>
+            </div>
           </div>
           <div className="flex gap-2 overflow-x-auto no-scrollbar px-5 pb-2">
             {adminNavTabs.map(tab => {
@@ -474,15 +468,55 @@ export default function App() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-6 bg-slate-100">
-          {adminTab === 'overview' && (
+          
+          {adminTab === 'dashboard' && (
             <div className="space-y-4 animate-in fade-in">
-              <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-2">System Status</h3>
+              <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-2">Community Overview</h3>
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200"><div className="text-slate-400 mb-1"><Users size={20}/></div><div className="text-2xl font-black text-slate-800">4,289</div><div className="text-[10px] font-bold text-slate-500 uppercase">Total Users</div></div>
-                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200"><div className="text-orange-500 mb-1"><Utensils size={20}/></div><div className="text-2xl font-black text-slate-800">842</div><div className="text-[10px] font-bold text-slate-500 uppercase">Active Hacks</div></div>
-                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200"><div className="text-red-500 mb-1"><AlertTriangle size={20}/></div><div className="text-2xl font-black text-slate-800">{pendingReportsCount}</div><div className="text-[10px] font-bold text-slate-500 uppercase">Pending Reports</div></div>
-                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200"><div className="text-green-500 mb-1 font-black text-lg">₱</div><div className="text-2xl font-black text-slate-800">1.2M</div><div className="text-[10px] font-bold text-slate-500 uppercase">Saved by Comm.</div></div>
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200"><div className="text-slate-400 mb-1"><Users size={20}/></div><div className="text-2xl font-black text-slate-800">{usersList.length}</div><div className="text-[10px] font-bold text-slate-500 uppercase">Total Users</div></div>
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200"><div className="text-green-500 mb-1"><Activity size={20}/></div><div className="text-2xl font-black text-slate-800">{activeUsersCount} / {inactiveUsersCount}</div><div className="text-[10px] font-bold text-slate-500 uppercase">Active / Inactive</div></div>
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200"><div className="text-orange-500 mb-1"><Utensils size={20}/></div><div className="text-2xl font-black text-slate-800">{hacks.length}</div><div className="text-[10px] font-bold text-slate-500 uppercase">Total Hacks Posted</div></div>
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200"><div className="text-amber-500 mb-1"><Store size={20}/></div><div className="text-2xl font-black text-slate-800">{pendingBusinessCount}</div><div className="text-[10px] font-bold text-slate-500 uppercase">Pending Business</div></div>
               </div>
+              <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex justify-between items-center mt-4">
+                <div>
+                  <h4 className="font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={18}/> Verification Queue</h4>
+                  <p className="text-[10px] font-medium text-slate-500">Users waiting for approval.</p>
+                </div>
+                <div className="text-xl font-black text-slate-800">{usersList.filter(u => !u.isVerified).length}</div>
+              </div>
+            </div>
+          )}
+
+          {adminTab === 'users' && (
+            <div className="space-y-4 animate-in fade-in">
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input type="text" placeholder="Search users by name or email..." value={adminSearch} onChange={(e) => setAdminSearch(e.target.value)} className="w-full bg-white border border-slate-200 py-3 pl-10 pr-4 rounded-xl font-medium text-sm focus:outline-none focus:border-orange-500 text-slate-900" />
+                </div>
+                <button onClick={exportCSV} className="p-3 bg-green-50 text-green-600 rounded-xl hover:bg-green-100 transition-colors border border-green-200 shadow-sm" title="Export to Excel (CSV)"><FileSpreadsheet size={20} /></button>
+                <button onClick={exportXML} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors border border-blue-200 shadow-sm" title="Export XML"><FileCode2 size={20} /></button>
+              </div>
+
+              {filteredUsers.map(u => (
+                <div key={u.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h4 className="font-black text-slate-800 text-base flex items-center gap-1">{u.username} {u.isVerified && <CheckCircle size={14} className="text-blue-500"/>}</h4>
+                      <p className="text-[10px] font-bold text-slate-400">{u.email} • {u.points} pts • {u.warnings} Warns</p>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase border ${u.status === 'active' ? 'bg-green-50 text-green-700 border-green-200' : u.status === 'shadowbanned' ? 'bg-slate-100 text-slate-600 border-slate-300' : 'bg-red-50 text-red-700 border-red-200'}`}>{u.status}</span>
+                  </div>
+                  <div className="flex gap-2 flex-wrap mt-1">
+                    {!u.isVerified && <button onClick={() => adminVerifyUser(u.id)} className="bg-blue-50 text-blue-600 border border-blue-200 font-bold py-1.5 px-3 rounded-lg text-xs hover:bg-blue-100">Verify</button>}
+                    <button onClick={() => adminWarnUser(u.id)} className="bg-amber-50 text-amber-600 border border-amber-200 font-bold py-1.5 px-3 rounded-lg text-xs hover:bg-amber-100">Warn</button>
+                    <button onClick={() => adminChangeUserStatus(u.id, u.status === 'shadowbanned' ? 'active' : 'shadowbanned')} className="bg-slate-100 text-slate-600 border border-slate-300 font-bold py-1.5 px-3 rounded-lg text-xs hover:bg-slate-200"><EyeOff size={12} className="inline mr-1 mb-0.5"/>{u.status === 'shadowbanned' ? 'Un-Shadowban' : 'Shadowban'}</button>
+                    <button onClick={() => adminChangeUserStatus(u.id, u.status === 'banned' ? 'active' : 'banned')} className="bg-red-50 text-red-600 border border-red-200 font-bold py-1.5 px-3 rounded-lg text-xs hover:bg-red-100"><Ban size={12} className="inline mr-1 mb-0.5"/>{u.status === 'banned' ? 'Unban' : 'Ban'}</button>
+                    <button onClick={() => adminDeleteUser(u.id)} className="p-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 ml-auto"><Trash2 size={16}/></button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 
@@ -511,44 +545,9 @@ export default function App() {
             </div>
           )}
 
-          {adminTab === 'users' && (
-            <div className="space-y-4 animate-in fade-in">
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                  <input type="text" placeholder="Search users by name or email..." value={adminSearch} onChange={(e) => setAdminSearch(e.target.value)} className="w-full bg-white border border-slate-200 py-3 pl-10 pr-4 rounded-xl font-medium text-sm focus:outline-none focus:border-orange-500 text-slate-900" />
-                </div>
-                <button onClick={exportCSV} className="p-3 bg-green-50 text-green-600 rounded-xl hover:bg-green-100 transition-colors border border-green-200 shadow-sm" title="Export to Excel (CSV)">
-                  <FileSpreadsheet size={20} />
-                </button>
-                <button onClick={exportXML} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors border border-blue-200 shadow-sm" title="Export XML">
-                  <FileCode2 size={20} />
-                </button>
-              </div>
-
-              {filteredUsers.map(u => (
-                <div key={u.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="font-black text-slate-800 text-base flex items-center gap-1">{u.username} {u.isVerified && <CheckCircle size={14} className="text-blue-500"/>}</h4>
-                      <p className="text-[10px] font-bold text-slate-400">{u.email} • {u.points} pts • {u.warnings} Warns</p>
-                    </div>
-                    <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase border ${u.status === 'active' ? 'bg-green-50 text-green-700 border-green-200' : u.status === 'shadowbanned' ? 'bg-slate-100 text-slate-600 border-slate-300' : 'bg-red-50 text-red-700 border-red-200'}`}>{u.status}</span>
-                  </div>
-                  <div className="flex gap-2 flex-wrap mt-1">
-                    <button onClick={() => adminAdjustUserPoints(u.id, 100)} className="bg-orange-50 text-orange-600 border border-orange-200 font-bold py-1.5 px-3 rounded-lg text-xs hover:bg-orange-100">+100 Pts</button>
-                    <button onClick={() => adminWarnUser(u.id)} className="bg-amber-50 text-amber-600 border border-amber-200 font-bold py-1.5 px-3 rounded-lg text-xs hover:bg-amber-100">Warn</button>
-                    <button onClick={() => adminChangeUserStatus(u.id, u.status === 'shadowbanned' ? 'active' : 'shadowbanned')} className="bg-slate-100 text-slate-600 border border-slate-300 font-bold py-1.5 px-3 rounded-lg text-xs hover:bg-slate-200"><EyeOff size={12} className="inline mr-1 mb-0.5"/>{u.status === 'shadowbanned' ? 'Un-Shadowban' : 'Shadowban'}</button>
-                    <button onClick={() => adminChangeUserStatus(u.id, u.status === 'banned' ? 'active' : 'banned')} className="bg-red-50 text-red-600 border border-red-200 font-bold py-1.5 px-3 rounded-lg text-xs hover:bg-red-100"><Ban size={12} className="inline mr-1 mb-0.5"/>{u.status === 'banned' ? 'Unban' : 'Ban'}</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
           {adminTab === 'reports' && (
             <div className="space-y-4 animate-in fade-in">
-              <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-2">Moderation Queue</h3>
+              <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-2">Reported Content Queue</h3>
               {reportsList.filter(r => r.status === 'pending').length === 0 ? (
                 <p className="text-center text-slate-400 font-bold py-8 bg-white rounded-2xl border border-slate-200 border-dashed">Queue is clear.</p>
               ) : (
@@ -560,12 +559,55 @@ export default function App() {
                     </div>
                     <p className="text-sm font-bold text-slate-800 mb-3">"{rep.reason}"</p>
                     <div className="flex gap-2">
-                      <button onClick={() => adminResolveReport(rep.id, 'delete')} className="flex-1 bg-red-50 text-red-600 font-bold py-2 rounded-xl text-xs border border-red-200 hover:bg-red-100">Delete Content</button>
+                      <button onClick={() => adminResolveReport(rep.id, 'delete')} className="flex-1 bg-red-50 text-red-600 font-bold py-2 rounded-xl text-xs border border-red-200 hover:bg-red-100">Remove Content</button>
+                      <button onClick={() => adminWarnUser(rep.targetId)} className="flex-1 bg-amber-50 text-amber-600 font-bold py-2 rounded-xl text-xs border border-amber-200 hover:bg-amber-100">Warn User</button>
                       <button onClick={() => adminResolveReport(rep.id, 'ignore')} className="flex-1 bg-slate-100 text-slate-600 font-bold py-2 rounded-xl text-xs hover:bg-slate-200">Dismiss</button>
                     </div>
                   </div>
                 ))
               )}
+            </div>
+          )}
+
+          {adminTab === 'business' && (
+            <div className="space-y-6 animate-in fade-in">
+              <div>
+                <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-3">Pending Requests</h3>
+                {businessRequests.filter(b => b.status === 'pending').length === 0 ? (
+                  <p className="text-center text-slate-400 font-bold py-4 bg-white rounded-2xl border border-slate-200 border-dashed">No pending business requests.</p>
+                ) : (
+                  businessRequests.filter(b => b.status === 'pending').map(req => (
+                    <div key={req.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-3">
+                      <h4 className="font-black text-slate-800">{req.restaurant} Claim</h4>
+                      <p className="text-sm text-slate-600 mt-1 mb-3">Requested by: <span className="font-bold text-slate-800">{req.user}</span> ({req.email})</p>
+                      <p className="text-xs font-bold text-slate-400 mb-4">Submitted: {req.date}</p>
+                      <div className="flex gap-2">
+                        <button onClick={() => adminApproveBusiness(req)} className="flex-1 bg-green-500 text-white font-bold py-2 rounded-xl flex justify-center items-center gap-1 hover:bg-green-600"><Check size={16}/> Approve</button>
+                        <button onClick={() => adminRejectBusiness(req.id)} className="flex-1 bg-red-100 text-red-600 font-bold py-2 rounded-xl flex justify-center items-center gap-1 hover:bg-red-200"><X size={16}/> Reject</button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div>
+                <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-3">Active Business Profiles</h3>
+                {activeBusinesses.map(bus => (
+                  <div key={bus.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="font-black text-slate-800 text-base flex items-center gap-1">{bus.restaurant} <CheckCircle size={14} className="text-blue-500"/></h4>
+                        <p className="text-[10px] font-bold text-slate-400">{bus.email}</p>
+                      </div>
+                      <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-blue-200">Verified</span>
+                    </div>
+                    <div className="flex gap-4 mt-3 pt-3 border-t border-slate-100">
+                      <div className="text-center"><p className="text-[10px] font-bold text-slate-400 uppercase">Profile Views</p><p className="font-black text-slate-800">{bus.views}</p></div>
+                      <div className="text-center"><p className="text-[10px] font-bold text-slate-400 uppercase">Active Promos</p><p className="font-black text-slate-800">{bus.promosActive}</p></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -580,7 +622,7 @@ export default function App() {
               </div>
 
               <div>
-                <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-3">Inbox</h3>
+                <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-3">Admin Inbox</h3>
                 <div className="space-y-3">
                   {inboxMessages.map(msg => (
                     <div key={msg.id} className={`bg-white p-4 rounded-2xl shadow-sm border ${msg.isRead ? 'border-slate-200 opacity-70' : 'border-blue-200 border-l-4 border-l-blue-500'}`}>
@@ -589,7 +631,8 @@ export default function App() {
                         <span className="text-[10px] font-bold text-slate-400">{msg.date}</span>
                       </div>
                       <p className="text-[10px] font-black uppercase text-slate-400 mb-2">From: {msg.from}</p>
-                      <p className="text-xs text-slate-600 line-clamp-2">{msg.body}</p>
+                      <p className="text-xs text-slate-600 line-clamp-2 mb-3">{msg.body}</p>
+                      <button className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">Reply Direct</button>
                     </div>
                   ))}
                 </div>
@@ -612,59 +655,102 @@ export default function App() {
               </div>
 
               <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-                <h4 className="font-black text-slate-800 flex items-center gap-2 mb-4"><Star size={18} className="text-amber-500"/> Top Categories</h4>
+                <h4 className="font-black text-slate-800 flex items-center gap-2 mb-4"><Trophy size={18} className="text-yellow-500"/> Top Contributors</h4>
                 <div className="space-y-3">
-                  <div>
-                    <div className="flex justify-between text-xs font-bold text-slate-600 mb-1"><span>Fast Food Hacks</span><span>65%</span></div>
-                    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden"><div className="bg-amber-500 h-full w-[65%]"></div></div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-xs font-bold text-slate-600 mb-1"><span>Coffee Customizations</span><span>20%</span></div>
-                    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden"><div className="bg-amber-500 h-full w-[20%]"></div></div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-xs font-bold text-slate-600 mb-1"><span>Convenience Store Promos</span><span>15%</span></div>
-                    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden"><div className="bg-amber-500 h-full w-[15%]"></div></div>
-                  </div>
+                  {usersList.sort((a,b) => b.points - a.points).slice(0, 3).map((u, i) => (
+                    <div key={u.id} className="flex items-center justify-between border-b border-slate-100 pb-2 last:border-0 last:pb-0">
+                      <div className="flex items-center gap-3">
+                        <div className="font-black text-slate-300 w-4">{i + 1}</div>
+                        <div><p className="font-bold text-slate-800 text-sm">{u.username}</p><p className="text-[10px] font-bold text-slate-400 uppercase">{u.posts} Posts</p></div>
+                      </div>
+                      <div className="text-orange-600 font-black text-sm">{u.points} pts</div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
           )}
 
           {adminTab === 'settings' && (
-            <div className="space-y-4 animate-in fade-in">
-              <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-2">App Configuration</h3>
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-                  <div>
-                    <h4 className="font-bold text-slate-800">Auto-Approve Hacks</h4>
-                    <p className="text-[10px] font-medium text-slate-500">Skip the moderation queue for new posts.</p>
+            <div className="space-y-6 animate-in fade-in">
+              
+              {/* Me Panel / Admin Profile */}
+              <div>
+                <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-3">Admin Profile (Me)</h3>
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="w-16 h-16 bg-slate-900 rounded-full flex items-center justify-center text-2xl text-white border-2 border-orange-500 shadow-lg">👑</div>
+                    <div>
+                      <h4 className="font-black text-slate-800 text-xl">SuperAdmin</h4>
+                      <p className="text-xs font-bold text-slate-500">admin@tipidmenu.ph</p>
+                      <span className="inline-block mt-1 bg-red-100 text-red-700 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-red-200">Role: Root Admin</span>
+                    </div>
                   </div>
-                  <button onClick={() => toggleSetting('autoApproveHacks')} className={`w-12 h-6 rounded-full p-1 transition-colors duration-200 ${appSettings.autoApproveHacks ? 'bg-green-500' : 'bg-slate-300'}`}>
-                    <div className={`w-4 h-4 bg-white rounded-full transition-transform duration-200 ${appSettings.autoApproveHacks ? 'translate-x-6' : 'translate-x-0'}`}></div>
-                  </button>
-                </div>
-                <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-                  <div>
-                    <h4 className="font-bold text-slate-800">Require OTP Verification</h4>
-                    <p className="text-[10px] font-medium text-slate-500">Users must verify to post hacks.</p>
+                  <div className="space-y-2 border-t border-slate-100 pt-4">
+                    <p className="text-xs font-bold text-slate-500 flex justify-between"><span>Last Login:</span> <span className="text-slate-800">{new Date().toLocaleString()}</span></p>
+                    <p className="text-xs font-bold text-slate-500 flex justify-between"><span>2FA Status:</span> <span className="text-green-600">Enabled</span></p>
                   </div>
-                  <button onClick={() => toggleSetting('requireOTP')} className={`w-12 h-6 rounded-full p-1 transition-colors duration-200 ${appSettings.requireOTP ? 'bg-green-500' : 'bg-slate-300'}`}>
-                    <div className={`w-4 h-4 bg-white rounded-full transition-transform duration-200 ${appSettings.requireOTP ? 'translate-x-6' : 'translate-x-0'}`}></div>
-                  </button>
-                </div>
-                <div className="p-4 flex justify-between items-center">
-                  <div>
-                    <h4 className="font-bold text-red-600">Maintenance Mode</h4>
-                    <p className="text-[10px] font-medium text-slate-500">Show maintenance screen to non-admins.</p>
+                  <div className="flex gap-2 mt-4">
+                    <button className="flex-1 bg-slate-100 text-slate-700 font-bold py-2 rounded-xl text-xs hover:bg-slate-200 border border-slate-200">Change Password</button>
+                    <button className="flex-1 bg-slate-100 text-slate-700 font-bold py-2 rounded-xl text-xs hover:bg-slate-200 border border-slate-200">Notification Prefs</button>
                   </div>
-                  <button onClick={() => toggleSetting('maintenanceMode')} className={`w-12 h-6 rounded-full p-1 transition-colors duration-200 ${appSettings.maintenanceMode ? 'bg-red-500' : 'bg-slate-300'}`}>
-                    <div className={`w-4 h-4 bg-white rounded-full transition-transform duration-200 ${appSettings.maintenanceMode ? 'translate-x-6' : 'translate-x-0'}`}></div>
-                  </button>
                 </div>
               </div>
+
+              {/* App Configuration */}
+              <div>
+                <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-3">App Configuration</h3>
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                  <div className="p-4 border-b border-slate-100 flex justify-between items-center">
+                    <div>
+                      <h4 className="font-bold text-slate-800">Auto-Approve Hacks</h4>
+                      <p className="text-[10px] font-medium text-slate-500">Skip the moderation queue for new posts.</p>
+                    </div>
+                    <button onClick={() => toggleSetting('autoApproveHacks')} className={`w-12 h-6 rounded-full p-1 transition-colors duration-200 ${appSettings.autoApproveHacks ? 'bg-green-500' : 'bg-slate-300'}`}>
+                      <div className={`w-4 h-4 bg-white rounded-full transition-transform duration-200 ${appSettings.autoApproveHacks ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                    </button>
+                  </div>
+                  <div className="p-4 border-b border-slate-100 flex justify-between items-center">
+                    <div>
+                      <h4 className="font-bold text-slate-800">Require Verification to Post</h4>
+                      <p className="text-[10px] font-medium text-slate-500">Users must verify OTP to post hacks.</p>
+                    </div>
+                    <button onClick={() => toggleSetting('requireOTP')} className={`w-12 h-6 rounded-full p-1 transition-colors duration-200 ${appSettings.requireOTP ? 'bg-green-500' : 'bg-slate-300'}`}>
+                      <div className={`w-4 h-4 bg-white rounded-full transition-transform duration-200 ${appSettings.requireOTP ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                    </button>
+                  </div>
+                  
+                  <div className="p-4 border-b border-slate-100 flex justify-between items-center">
+                    <div>
+                      <h4 className="font-bold text-slate-800">Daily Post Limit</h4>
+                      <p className="text-[10px] font-medium text-slate-500">Max hacks a user can post per day.</p>
+                    </div>
+                    <input type="number" value={appSettings.dailyPostLimit} onChange={(e) => updateSettingValue('dailyPostLimit', e.target.value)} className="w-16 bg-slate-50 border border-slate-200 rounded-lg text-center font-bold text-sm py-1 outline-none focus:border-orange-500"/>
+                  </div>
+                  
+                  <div className="p-4 border-b border-slate-100 flex justify-between items-center">
+                    <div>
+                      <h4 className="font-bold text-slate-800">Reward Point Multiplier</h4>
+                      <p className="text-[10px] font-medium text-slate-500">Adjust points given (e.g. 2x for events).</p>
+                    </div>
+                    <input type="number" step="0.1" value={appSettings.rewardMultiplier} onChange={(e) => updateSettingValue('rewardMultiplier', e.target.value)} className="w-16 bg-slate-50 border border-slate-200 rounded-lg text-center font-bold text-sm py-1 outline-none focus:border-orange-500"/>
+                  </div>
+
+                  <div className="p-4 flex justify-between items-center bg-red-50/50">
+                    <div>
+                      <h4 className="font-bold text-red-600">Maintenance Mode</h4>
+                      <p className="text-[10px] font-medium text-red-500/70">Block access to non-admin users.</p>
+                    </div>
+                    <button onClick={() => toggleSetting('maintenanceMode')} className={`w-12 h-6 rounded-full p-1 transition-colors duration-200 ${appSettings.maintenanceMode ? 'bg-red-500' : 'bg-slate-300'}`}>
+                      <div className={`w-4 h-4 bg-white rounded-full transition-transform duration-200 ${appSettings.maintenanceMode ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
             </div>
           )}
+
         </div>
       </div>
     );
@@ -679,21 +765,22 @@ export default function App() {
         Tipid Menu
       </h1>
       <div className="flex items-center gap-3">
+        {/* Properly Sized & Aligned Admin Command Center Button */}
         {userData.isAdmin && (
           <button 
             onClick={() => setActiveView('admin')} 
-            className="w-10 h-10 bg-slate-900 text-orange-400 rounded-full flex items-center justify-center shadow-md hover:bg-slate-800 transition-colors active:scale-95"
+            className="w-10 h-10 bg-slate-900 text-orange-400 rounded-full flex items-center justify-center shadow-md hover:bg-slate-800 transition-colors active:scale-95 border border-slate-700"
             title="Command Center"
           >
             <Shield size={20} />
           </button>
         )}
-        <button onClick={() => setCurrentTab('profile')} className="flex items-center gap-2 bg-orange-50 px-3 py-1.5 rounded-full border border-orange-100 active:scale-95 transition-transform">
-          <div className="flex flex-col items-end">
-            <span className="text-xs font-bold text-orange-700">{userData.points} pts</span>
-            <span className="text-[10px] font-semibold text-orange-500">{userTier.icon} {userTier.name}</span>
+        <button onClick={() => setCurrentTab('profile')} className="flex items-center gap-2 bg-orange-50 px-3 py-1.5 rounded-full border border-orange-100 active:scale-95 transition-transform h-10">
+          <div className="flex flex-col items-end justify-center">
+            <span className="text-[11px] font-black text-orange-700 leading-none mb-0.5">{userData.points} pts</span>
+            <span className="text-[9px] font-bold text-orange-500 leading-none">{userTier.name}</span>
           </div>
-          <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center text-lg border border-orange-200">{userData.avatar}</div>
+          <div className="w-7 h-7 bg-white rounded-full flex items-center justify-center text-sm border border-orange-200">{userData.avatar}</div>
         </button>
       </div>
     </header>
@@ -712,6 +799,7 @@ export default function App() {
     const filtered = restaurants.filter(r => r.name.toLowerCase().includes(searchQuery.toLowerCase()));
     return (
       <div className="flex-1 overflow-y-auto bg-slate-50 p-5 pb-24">
+        {/* Global Announcement Banner */}
         {globalAnnouncement && (
           <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4 rounded-2xl shadow-lg mb-6 flex gap-3 items-start animate-in slide-in-from-top">
             <Bell size={20} className="shrink-0 mt-0.5"/>
@@ -840,18 +928,7 @@ export default function App() {
         <div className="bg-gradient-to-br from-orange-500 to-amber-500 rounded-[32px] p-6 text-white mb-6 shadow-xl shadow-orange-500/20"><h4 className="font-black text-xl mb-2">Verify Account</h4><p className="text-white/80 text-sm font-medium mb-4">Complete your verification to post hacks and unlock +100 Bonus Points.</p><button onClick={() => setShowVerifyModal(true)} className="w-full py-3.5 bg-white text-orange-600 font-black rounded-2xl shadow-lg hover:scale-[1.02] active:scale-95 transition-all">Start Verification</button></div>
       )}
       
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 text-center shadow-sm">
-          <Share2 size={24} className="mx-auto mb-2 text-slate-300"/>
-          <div className="text-2xl font-black text-slate-800">{userData.hacksCount}</div>
-          <div className="text-[10px] font-black uppercase text-slate-400">Hacks Shared</div>
-        </div>
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 text-center shadow-sm">
-          <div className="text-2xl font-black text-green-500 mb-2">₱</div>
-          <div className="text-2xl font-black text-slate-800">{userData.totalSavings}</div>
-          <div className="text-[10px] font-black uppercase text-slate-400">Total Savings Shared</div>
-        </div>
-      </div>
+      <div className="grid grid-cols-2 gap-4 mb-6"><div className="bg-white p-6 rounded-3xl border border-slate-100 text-center shadow-sm"><Share2 size={24} className="mx-auto mb-2 text-slate-300"/><div className="text-2xl font-black text-slate-800">{userData.hacksCount}</div><div className="text-[10px] font-black uppercase text-slate-400">Hacks Shared</div></div><div className="bg-white p-6 rounded-3xl border border-slate-100 text-center shadow-sm"><div className="text-2xl font-black text-green-500 mb-2">₱</div><div className="text-2xl font-black text-slate-800">{userData.totalSavings}</div><div className="text-[10px] font-black uppercase text-slate-400">Total Savings Shared</div></div></div>
     </div>
   );
 
@@ -881,8 +958,10 @@ export default function App() {
       
       {activeView === 'main' && renderTabBar()}
       
+      {/* Toast */}
       {toast && <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-5 py-2.5 rounded-full shadow-2xl z-[200] border border-slate-700 animate-in fade-in slide-in-from-top-4 flex items-center gap-2"><Info size={16} className="text-orange-400" /><p className="font-bold text-sm whitespace-nowrap">{toast}</p></div>}
 
+      {/* Secret Admin Modal */}
       {showAdminAuthModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-slate-900/90 backdrop-blur-sm animate-in fade-in">
           <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-[40px] p-8 shadow-2xl relative overflow-hidden">
@@ -899,6 +978,7 @@ export default function App() {
         </div>
       )}
 
+      {/* Verification Modal */}
       {showVerifyModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-sm rounded-[40px] p-8 shadow-2xl relative overflow-hidden">
@@ -916,6 +996,7 @@ export default function App() {
         </div>
       )}
 
+      {/* Add Hack Modal */}
       {showAddHackModal && (
         <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-md sm:rounded-[40px] rounded-t-[40px] p-8 pt-10 shadow-2xl relative max-h-[90vh] flex flex-col animate-in slide-in-from-bottom">
@@ -932,6 +1013,7 @@ export default function App() {
         </div>
       )}
 
+      {/* Edit Profile Modal */}
       {showEditProfileModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-sm rounded-[40px] p-8 shadow-2xl relative">
@@ -950,6 +1032,7 @@ export default function App() {
         </div>
       )}
 
+      {/* Business Claim Modal */}
       {showBusinessModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-sm rounded-[40px] p-8 shadow-2xl relative">
