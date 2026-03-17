@@ -6,16 +6,20 @@ import {
   MapPin, Map as MapIcon, Navigation2, Car, Shield, Check, Trash2, Ban,
   AlertTriangle, BarChart3, Settings, MessageSquare, Pin, Megaphone,
   TrendingUp, EyeOff, AlertOctagon, Bell, Users, Activity,
-  FileSpreadsheet, FileCode2, Store, LogOut, Trophy
+  FileSpreadsheet, FileCode2, Store, LogOut, Trophy,
+  Smartphone, Instagram, Link as LinkIcon, Compass, MapPin as MapPinIcon
 } from 'lucide-react';
+
+// --- Default Location: Tayuman, Tondo, Manila ---
+const DEFAULT_LOC = { lat: 14.6116, lng: 120.9780 };
 
 // --- Mock Data ---
 const MOCK_RESTAURANTS = [
-  { id: '1', name: 'Jollibee', category: 'Fast Food', rating: 4.8, address: 'BGC, Taguig', lat: 14.5547, lng: 121.0244, img: '🐝', verified: true },
-  { id: '2', name: "McDonald's", category: 'Fast Food', rating: 4.5, address: 'Makati Ave', lat: 14.56, lng: 121.03, img: '🍔', verified: true },
-  { id: '3', name: 'Mang Inasal', category: 'Fast Food', rating: 4.7, address: 'Quezon City', lat: 14.65, lng: 121.03, img: '🍗', verified: true },
-  { id: '4', name: 'Greenwich', category: 'Pizza', rating: 4.3, address: 'Ortigas Center', lat: 14.58, lng: 121.06, img: '🍕', verified: true },
-  { id: '5', name: 'Starbucks', category: 'Coffee', rating: 4.6, address: 'Eastwood', lat: 14.60, lng: 121.08, img: '☕', verified: false }
+  { id: '1', name: 'Jollibee SM San Lazaro', category: 'Fast Food', rating: 4.8, address: 'Tayuman St', lat: 14.6125, lng: 120.9790, img: '🐝', verified: true },
+  { id: '2', name: "McDonald's Tayuman", category: 'Fast Food', rating: 4.5, address: 'Tayuman cor Rizal Ave', lat: 14.6110, lng: 120.9770, img: '🍔', verified: true },
+  { id: '3', name: 'Mang Inasal', category: 'Fast Food', rating: 4.7, address: 'SM City San Lazaro', lat: 14.6130, lng: 120.9760, img: '🍗', verified: true },
+  { id: '4', name: 'Greenwich', category: 'Pizza', rating: 4.3, address: 'Tayuman Center', lat: 14.6105, lng: 120.9795, img: '🍕', verified: true },
+  { id: '5', name: 'Starbucks', category: 'Coffee', rating: 4.6, address: 'SM San Lazaro', lat: 14.6140, lng: 120.9800, img: '☕', verified: false }
 ];
 
 const MOCK_PROMOS = [
@@ -37,62 +41,159 @@ const TIERS = [
   { name: 'Newbie Saver', icon: '🥚', minPoints: 0, color: 'text-green-600', bg: 'bg-green-100', border: 'border-green-200' }
 ];
 
+// --- Robust Leaflet Map Component ---
+const LeafletMap = ({ center, markers = [], onMarkerClick, onMapClick, userLocation, onRecenter, mini = false }) => {
+  const mapRef = useRef(null);
+  const mapInstance = useRef(null);
+
+  // 1. Initialize Map & Click Handlers
+  useEffect(() => {
+    if (!window.L || !mapRef.current) return;
+
+    if (!mapInstance.current) {
+      const map = window.L.map(mapRef.current, { 
+        zoomControl: !mini,
+        dragging: !mini,
+        touchZoom: !mini,
+        scrollWheelZoom: !mini,
+        doubleClickZoom: !mini,
+        keyboard: !mini
+      }).setView([center.lat, center.lng], mini ? 16 : 15);
+      
+      window.L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: mini ? '' : '&copy; <a href="https://carto.com/attributions">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        subdomains: 'abcd',
+        maxZoom: 20
+      }).addTo(map);
+
+      mapInstance.current = map;
+    }
+
+    const map = mapInstance.current;
+    map.off('click'); // Clear stale handlers
+    if (onMapClick) {
+      map.on('click', (e) => onMapClick(e.latlng));
+    }
+  }, [mini, onMapClick, center.lat, center.lng]);
+
+  // 2. Manage View, Markers, and User Location
+  useEffect(() => {
+    if (!mapInstance.current || !window.L) return;
+    const map = mapInstance.current;
+    
+    // Smoothly pan to new center
+    map.setView([center.lat, center.lng]);
+
+    // Clear existing markers
+    map.eachLayer((layer) => {
+      if (layer instanceof window.L.Marker) {
+        layer.remove();
+      }
+    });
+
+    // Render Data Markers
+    markers.forEach(m => {
+      const isUser = m.type === 'user';
+      const isPromoted = m.isPromoted;
+      const borderColor = isUser ? 'border-blue-500' : isPromoted ? 'border-amber-400' : 'border-orange-500';
+      const bgColor = isPromoted ? 'bg-gradient-to-br from-amber-200 to-yellow-400' : 'bg-white';
+      const glow = isPromoted ? 'shadow-[0_0_15px_rgba(251,191,36,0.8)]' : 'shadow-lg';
+      
+      const iconHtml = `<div class="w-10 h-10 ${bgColor} rounded-full flex items-center justify-center ${glow} border-2 ${borderColor} text-xl relative">
+        ${m.img || '📍'}
+        ${isPromoted ? '<div class="absolute -top-1 -right-1 bg-amber-500 text-white text-[8px] px-1 rounded font-black border border-white">AD</div>' : ''}
+      </div>`;
+      
+      const icon = window.L.divIcon({
+        className: 'bg-transparent',
+        html: iconHtml,
+        iconSize: [40, 40],
+        iconAnchor: [20, 40]
+      });
+
+      const marker = window.L.marker([m.lat, m.lng], { icon }).addTo(map);
+      if (onMarkerClick) {
+        marker.on('click', () => onMarkerClick(m));
+      }
+    });
+
+    // Render User/Admin Location Marker
+    if (userLocation) {
+      const userIconHtml = `<div class="relative w-6 h-6"><div class="absolute inset-0 bg-blue-500 rounded-full animate-ping opacity-75"></div><div class="relative w-6 h-6 bg-blue-600 border-4 border-white rounded-full shadow-lg"></div></div>`;
+      const userIcon = window.L.divIcon({
+        className: 'bg-transparent',
+        html: userIconHtml,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+      });
+      window.L.marker([userLocation.lat, userLocation.lng], { icon: userIcon }).addTo(map);
+    }
+  }, [center, markers, userLocation, onMarkerClick]);
+
+  // 3. Cleanup on Unmount
+  useEffect(() => {
+    return () => {
+      if (mapInstance.current) {
+        mapInstance.current.remove();
+        mapInstance.current = null;
+      }
+    };
+  }, []);
+
+  return (
+    <div className={`relative w-full h-full z-0 ${mini ? 'pointer-events-none' : ''}`}>
+      <div ref={mapRef} className="w-full h-full" style={{ zIndex: 0 }} />
+      {onRecenter && !mini && (
+        <button 
+          onClick={onRecenter}
+          className="absolute bottom-6 right-4 z-[400] bg-white p-3 rounded-full shadow-xl border border-slate-200 text-blue-600 hover:bg-blue-50 active:scale-95 transition-all"
+          title="My Location"
+        >
+          <Compass size={24} />
+        </button>
+      )}
+    </div>
+  );
+};
+
 export default function App() {
-  // Authentication & App State
   const [appState, setAppState] = useState('login'); 
   const [authForm, setAuthForm] = useState({ email: '', password: '' });
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
   
-  // User Data State (In-Memory)
+  const [leafletReady, setLeafletReady] = useState(false);
+  const [mapCenter, setMapCenter] = useState(DEFAULT_LOC);
+  const [userLoc, setUserLoc] = useState(DEFAULT_LOC);
+
   const [userData, setUserData] = useState({ 
-    points: 50, isPro: false, isVerified: false, username: 'Foodie', avatar: '👤', favorites: [], following: [], hacksCount: 0, totalSavings: 0, isAdmin: false
+    points: 50, isPro: false, isVerified: false, username: 'Foodie', fullName: '', email: 'foodie@example.com', dob: '', whatsapp: '', messenger: '', instagram: '', avatar: '👤', favorites: [], following: [], hacksCount: 0, totalSavings: 0, isAdmin: false
   });
   
-  // App Data State
-  const [restaurants] = useState(MOCK_RESTAURANTS);
+  const [restaurants, setRestaurants] = useState(MOCK_RESTAURANTS);
   const [hacks, setHacks] = useState(MOCK_HACKS);
-  const [promos] = useState(MOCK_PROMOS);
+  const [promos, setPromos] = useState(MOCK_PROMOS);
   const [globalAnnouncement, setGlobalAnnouncement] = useState('');
   
-  // Advanced Admin State
   const [usersList, setUsersList] = useState([
-    { id: '001', username: 'PinoyEater', email: 'pinoy@eater.com', isVerified: true, status: 'active', joined: '2023-10-12', points: 1200, warnings: 0, posts: 12, lastLogin: '2026-03-17' },
-    { id: '002', username: 'HackMaster', email: 'master@hack.com', isVerified: true, status: 'active', joined: '2023-11-05', points: 300, warnings: 1, posts: 5, lastLogin: '2026-03-16' },
-    { id: '003', username: 'SpamBot99', email: 'spam@bot.com', isVerified: false, status: 'shadowbanned', joined: '2024-01-20', points: 0, warnings: 3, posts: 0, lastLogin: '2026-02-10' },
-    { id: '004', username: 'InactiveJoe', email: 'joe@inactive.com', isVerified: false, status: 'inactive', joined: '2023-05-10', points: 50, warnings: 0, posts: 0, lastLogin: '2023-06-01' },
+    { id: '001', username: 'PinoyEater', email: 'pinoy@eater.com', isVerified: true, status: 'active', joined: '2023-10-12', points: 1200, warnings: 0, posts: 12, lastLogin: '2026-03-17', lat: 14.6120, lng: 120.9785, img: '👤' },
+    { id: '002', username: 'HackMaster', email: 'master@hack.com', isVerified: true, status: 'active', joined: '2023-11-05', points: 300, warnings: 1, posts: 5, lastLogin: '2026-03-16', lat: 14.6100, lng: 120.9765, img: '🧠' },
+    { id: '003', username: 'SpamBot99', email: 'spam@bot.com', isVerified: false, status: 'shadowbanned', joined: '2024-01-20', points: 0, warnings: 3, posts: 0, lastLogin: '2026-02-10', lat: 14.6135, lng: 120.9775, img: '🤖' },
   ]);
-  const [businessRequests, setBusinessRequests] = useState([
-    { id: 'b1', restaurant: 'Jollibee BGC', user: 'Jollibee_Admin', email: 'admin@jfc.com', status: 'pending', date: '2024-02-15' }
-  ]);
-  const [activeBusinesses, setActiveBusinesses] = useState([
-    { id: 'ab1', restaurant: "McDonald's Makati Ave", email: 'mcdomakati@ph.com', views: 1250, promosActive: 1 }
-  ]);
-  const [reportsList, setReportsList] = useState([
-    { id: 'r1', targetId: 'h2', type: 'Hack', reason: "Misleading info, doesn't work anymore.", reportedBy: 'AngryUser12', status: 'pending' },
-    { id: 'r2', targetId: 'u3', type: 'User', reason: 'Spamming referral codes in descriptions.', reportedBy: 'PinoyEater', status: 'pending' },
-  ]);
-  const [inboxMessages, setInboxMessages] = useState([
-    { id: 'm1', from: 'KFC Marketing', subject: 'Partnership Inquiry', body: 'We want to post official promos on your app.', date: 'Today', isRead: false },
-    { id: 'm2', from: 'User123', subject: 'Bug Report', body: 'The map isn\'t loading on my iPhone.', date: 'Yesterday', isRead: true },
-  ]);
-  const [appSettings, setAppSettings] = useState({
-    autoApproveHacks: false,
-    maintenanceMode: false,
-    requireOTP: true,
-    dailyPostLimit: 5,
-    rewardMultiplier: 1,
-  });
+  const [businessRequests, setBusinessRequests] = useState([]);
+  const [activeBusinesses, setActiveBusinesses] = useState([]);
+  const [reportsList, setReportsList] = useState([]);
+  const [inboxMessages, setInboxMessages] = useState([]);
+  const [appSettings, setAppSettings] = useState({ autoApproveHacks: false, requireOTP: true });
 
   const [adminTab, setAdminTab] = useState('dashboard');
   const [adminSearch, setAdminSearch] = useState('');
+  const [adminSelectedMarker, setAdminSelectedMarker] = useState(null);
 
-  // Navigation & UI State
   const [currentTab, setCurrentTab] = useState('spots');
   const [activeView, setActiveView] = useState('main'); 
   const [selectedRes, setSelectedRes] = useState(null);
   
-  // Modals & Inputs
   const [showVerifyModal, setShowVerifyModal] = useState(false);
   const [showAddHackModal, setShowAddHackModal] = useState(false);
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
@@ -101,16 +202,41 @@ export default function App() {
   
   const [otpInput, setOtpInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [editForm, setEditForm] = useState({ username: '', avatar: '' });
+  const [editForm, setEditForm] = useState({ username: '', fullName: '', email: '', password: '', dob: '', whatsapp: '', messenger: '', instagram: '', avatar: '' });
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [broadcastInput, setBroadcastInput] = useState('');
   const [toast, setToast] = useState('');
 
-  // Refs for Secret Admin Access
+  // States for adding new restaurants
+  const [isAddingNewRes, setIsAddingNewRes] = useState(false);
+  const [newResForm, setNewResForm] = useState({ name: '', address: '', category: 'Fast Food', img: '📍', lat: DEFAULT_LOC.lat, lng: DEFAULT_LOC.lng });
+
+  // States for Business Owner Claim/Add
+  const [ownerTab, setOwnerTab] = useState('claim'); // 'claim' | 'new'
+  const [promoteListing, setPromoteListing] = useState(false);
+  const [processingPayment, setProcessingPayment] = useState(false);
+
   const logoTapCount = useRef(0);
   const logoTapTimeout = useRef(null);
 
   const userTier = useMemo(() => TIERS.find(t => (userData.points || 0) >= t.minPoints) || TIERS[TIERS.length - 1], [userData.points]);
+
+  useEffect(() => {
+    if (window.L) {
+      setLeafletReady(true);
+      return;
+    }
+    const style = document.createElement('link');
+    style.rel = 'stylesheet';
+    style.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(style);
+
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.async = true;
+    script.onload = () => setLeafletReady(true);
+    document.head.appendChild(script);
+  }, []);
 
   const showToastMessage = (msg) => { 
     if (typeof msg !== 'string') return;
@@ -118,50 +244,20 @@ export default function App() {
     setTimeout(() => setToast(''), 3000); 
   };
 
-  // --- XML & CSV Export ---
-  const exportCSV = () => {
-    const headers = ['ID', 'Name', 'Email', 'Status', 'Verified', 'Posts', 'Last Login'];
-    const rows = usersList.map(u => [
-      u.id, u.username, u.email, u.status, String(u.isVerified).toUpperCase(), u.posts || 0, u.lastLogin || u.joined
-    ]);
-    
-    const csvContent = "data:text/csv;charset=utf-8," + headers.join(',') + '\n' + rows.map(e => e.join(',')).join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `user_data_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showToastMessage("Excel (CSV) exported successfully!");
+  const handleGetLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition((pos) => {
+        const newLoc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setUserLoc(newLoc);
+        setMapCenter(newLoc);
+        showToastMessage("Location updated!");
+      }, () => {
+        showToastMessage("Location access denied. Using default.");
+        setMapCenter(DEFAULT_LOC);
+      });
+    }
   };
 
-  const exportXML = () => {
-    let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<users>\n';
-    usersList.forEach(u => {
-      xml += `  <user id="${u.id}">\n`;
-      xml += `    <name>${u.username}</name>\n`;
-      xml += `    <email>${u.email}</email>\n`;
-      xml += `    <status>${u.status}</status>\n`;
-      xml += `    <verified>${u.isVerified}</verified>\n`;
-      xml += `    <posts>${u.posts || 0}</posts>\n`;
-      xml += `    <lastLogin>${u.lastLogin || u.joined}</lastLogin>\n`;
-      xml += `  </user>\n`;
-    });
-    xml += '</users>';
-    
-    const blob = new Blob([xml], { type: 'text/xml' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", "data.xml");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showToastMessage("XML data structure exported successfully!");
-  };
-
-  // --- Secret Admin Handlers ---
   const handleLogoTap = () => {
     logoTapCount.current += 1;
     if (logoTapTimeout.current) clearTimeout(logoTapTimeout.current);
@@ -198,7 +294,6 @@ export default function App() {
     }
   };
 
-  // --- Core Handlers ---
   const handleGuestLogin = () => {
     setAppState('main');
     showToastMessage("Welcome, Guest!");
@@ -207,7 +302,6 @@ export default function App() {
   const handleEmailAuth = (e) => {
     e.preventDefault();
     setAuthLoading(true);
-    setAuthError('');
     setTimeout(() => {
       setAuthLoading(false);
       setAppState('main');
@@ -215,10 +309,6 @@ export default function App() {
     }, 800);
   };
   
-  const handleOtpChange = (e) => {
-    setOtpInput(e.target.value.replace(/[^0-9]/g, ''));
-  };
-
   const handleVerifyOTP = (e) => {
     e.preventDefault();
     if (otpInput === '1234') {
@@ -231,9 +321,28 @@ export default function App() {
 
   const handleUpdateProfile = (e) => {
     e.preventDefault();
-    setUserData(prev => ({ ...prev, username: editForm.username, avatar: editForm.avatar }));
+    setUserData(prev => ({ ...prev, username: editForm.username, avatar: editForm.avatar, fullName: editForm.fullName, email: editForm.email, dob: editForm.dob, whatsapp: editForm.whatsapp, messenger: editForm.messenger, instagram: editForm.instagram }));
     setShowEditProfileModal(false);
-    showToastMessage("Profile updated!");
+    showToastMessage("Profile & Settings updated!");
+  };
+
+  const saveNewRestaurant = () => {
+    if (!newResForm.name || !newResForm.address) return showToastMessage("Please fill in Name and Address.");
+    const newRes = {
+      id: Math.random().toString(36).substr(2, 9),
+      name: newResForm.name,
+      category: newResForm.category,
+      address: newResForm.address,
+      lat: newResForm.lat,
+      lng: newResForm.lng,
+      rating: 0,
+      img: newResForm.img,
+      verified: false
+    };
+    setRestaurants(prev => [newRes, ...prev]);
+    setSelectedRes(newRes);
+    setIsAddingNewRes(false);
+    showToastMessage("Restaurant added successfully!");
   };
 
   const submitHack = (e) => {
@@ -243,15 +352,15 @@ export default function App() {
       return setShowVerifyModal(true);
     }
     
+    if (!selectedRes) return showToastMessage("Please select a restaurant first.");
+
     const formData = new FormData(e.target);
-    const savings = Number(formData.get('savings'));
-    
     const newHack = {
       id: Math.random().toString(36).substr(2, 9),
       resId: selectedRes.id, 
       title: formData.get('title'), 
       desc: formData.get('desc'),
-      savings: savings, 
+      savings: Number(formData.get('savings')), 
       votes: 1, 
       user: userData.username,
       avatar: userData.avatar, 
@@ -260,121 +369,53 @@ export default function App() {
     };
 
     setHacks(prev => [newHack, ...prev]);
-    setUserData(prev => ({ ...prev, points: prev.points + 50, hacksCount: prev.hacksCount + 1, totalSavings: prev.totalSavings + savings }));
+    setUserData(prev => ({ ...prev, points: prev.points + 50, hacksCount: prev.hacksCount + 1, totalSavings: prev.totalSavings + Number(formData.get('savings')) }));
     setShowAddHackModal(false);
     showToastMessage(appSettings.autoApproveHacks ? "Hack published! +50 Points" : "Hack submitted for review! +50 Points");
   };
 
-  // --- Advanced Admin Handlers ---
-  const adminTogglePin = (id) => {
-    setHacks(prev => prev.map(h => h.id === id ? { ...h, isPinned: !h.isPinned } : h));
-    showToastMessage("Pin status updated.");
-  };
-
-  const adminAdjustUserPoints = (id, amount) => {
-    setUsersList(prev => prev.map(u => u.id === id ? { ...u, points: u.points + amount } : u));
-    showToastMessage(`Added ${amount} points to user.`);
-  };
-
-  const adminWarnUser = (id) => {
-    setUsersList(prev => prev.map(u => u.id === id ? { ...u, warnings: u.warnings + 1 } : u));
-    showToastMessage("Warning sent to user.");
-  };
-
-  const adminChangeUserStatus = (id, status) => {
-    setUsersList(prev => prev.map(u => u.id === id ? { ...u, status } : u));
-    showToastMessage(`User status changed to ${status}.`);
-  };
-
-  const adminResolveReport = (id, action) => {
-    setReportsList(prev => prev.map(r => r.id === id ? { ...r, status: 'resolved' } : r));
-    if (action === 'delete') showToastMessage("Content deleted and report resolved.");
-    else showToastMessage("Report dismissed.");
-  };
-
-  const sendBroadcast = (e) => {
+  const submitBusinessFlow = (e) => {
     e.preventDefault();
-    setGlobalAnnouncement(broadcastInput);
-    setBroadcastInput('');
-    showToastMessage("Broadcast sent to all users!");
+    if (ownerTab === 'claim') {
+      const newReq = { id: Math.random().toString(36).substr(2, 9), restaurant: selectedRes?.name || 'Unknown', user: userData.username, email: 'business@owner.com', status: 'pending', date: new Date().toISOString().split('T')[0] };
+      setBusinessRequests(prev => [newReq, ...prev]);
+      setShowBusinessModal(false);
+      showToastMessage("Claim requested! Our team will verify soon.");
+    } else {
+      if (promoteListing) {
+        setProcessingPayment(true);
+        setTimeout(() => {
+          setProcessingPayment(false);
+          finalizeBusinessAdd();
+        }, 1500);
+      } else {
+        finalizeBusinessAdd();
+      }
+    }
   };
 
-  const toggleSetting = (key) => {
-    setAppSettings(prev => ({ ...prev, [key]: !prev[key] }));
-    showToastMessage("Setting updated.");
-  };
-
-  const updateSettingValue = (key, value) => {
-    setAppSettings(prev => ({ ...prev, [key]: value }));
+  const finalizeBusinessAdd = () => {
+    const newRes = {
+      id: Math.random().toString(36).substr(2, 9),
+      name: newResForm.name,
+      category: newResForm.category,
+      address: newResForm.address,
+      lat: newResForm.lat,
+      lng: newResForm.lng,
+      rating: 0,
+      img: newResForm.img,
+      verified: true,
+      isPromoted: promoteListing
+    };
+    setRestaurants(prev => [newRes, ...prev]);
+    setActiveBusinesses(prev => [{ id: newRes.id, restaurant: newRes.name, email: userData.email, views: 0, promosActive: 0 }, ...prev]);
+    setShowBusinessModal(false);
+    showToastMessage(promoteListing ? "Payment Success! Promoted listing added." : "Business listed successfully.");
   };
 
   const openNav = (type, lat, lng) => {
     const urls = { google: `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, apple: `http://maps.apple.com/?daddr=${lat},${lng}`, waze: `https://waze.com/ul?ll=${lat},${lng}&navigate=yes` };
     window.open(urls[type]);
-  };
-
-  const handleUpgradePro = (method) => {
-    if (method === 'points' && userData.points < 1000) return showToastMessage("Not enough points!");
-    setUserData(prev => ({ ...prev, isPro: true, points: method === 'points' ? prev.points - 1000 : prev.points }));
-    showToastMessage("Welcome to PRO! All hacks unlocked.");
-  };
-
-  const handleToggleFavorite = (hackId) => {
-    setUserData(prev => {
-      const isFavorited = prev.favorites.includes(hackId);
-      return { ...prev, favorites: isFavorited ? prev.favorites.filter(id => id !== hackId) : [...prev.favorites, hackId] };
-    });
-  };
-
-  const submitBusinessClaim = (e) => {
-    e.preventDefault();
-    const newReq = {
-      id: Math.random().toString(36).substr(2, 9),
-      restaurant: selectedRes?.name,
-      user: userData.username,
-      email: 'business@owner.com',
-      status: 'pending',
-      date: new Date().toISOString().split('T')[0]
-    };
-    setBusinessRequests(prev => [newReq, ...prev]);
-    setShowBusinessModal(false);
-    showToastMessage("Claim requested! Our team will verify soon.");
-  };
-
-  const adminApproveHack = (id) => {
-    setHacks(prev => prev.map(h => h.id === id ? { ...h, status: 'approved' } : h));
-    showToastMessage("Hack Approved & Published!");
-  };
-
-  const adminRejectHack = (id) => {
-    setHacks(prev => prev.filter(h => h.id !== id));
-    showToastMessage("Hack Rejected and Deleted.");
-  };
-
-  const adminVerifyUser = (id) => {
-    setUsersList(prev => prev.map(u => u.id === id ? { ...u, isVerified: true } : u));
-    showToastMessage("User Verified!");
-  };
-
-  const adminBlockUser = (id) => {
-    setUsersList(prev => prev.map(u => u.id === id ? { ...u, status: u.status === 'blocked' ? 'active' : 'blocked' } : u));
-    showToastMessage("User Status Changed!");
-  };
-
-  const adminDeleteUser = (id) => {
-    setUsersList(prev => prev.filter(u => u.id !== id));
-    showToastMessage("User Account Deleted.");
-  };
-
-  const adminApproveBusiness = (req) => {
-    setBusinessRequests(prev => prev.filter(b => b.id !== req.id));
-    setActiveBusinesses(prev => [...prev, { id: req.id, restaurant: req.restaurant, email: req.email, views: 0, promosActive: 0 }]);
-    showToastMessage("Business Claim Approved!");
-  };
-
-  const adminRejectBusiness = (id) => {
-    setBusinessRequests(prev => prev.map(b => b.id === id ? { ...b, status: 'rejected' } : b));
-    showToastMessage("Business Claim Rejected.");
   };
 
   // --- Views ---
@@ -396,27 +437,15 @@ export default function App() {
               </div>
             )}
             
-            <div>
-              <label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Email Address</label>
-              <input required type="email" value={authForm.email} onChange={e => setAuthForm({...authForm, email: e.target.value})} className="w-full bg-slate-50 px-5 py-4 rounded-2xl font-bold text-slate-900 border border-slate-100 outline-none focus:ring-2 focus:ring-orange-500/20 mt-1 transition-all" placeholder="juan@example.com" />
-            </div>
-            <div>
-              <label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Password</label>
-              <input required type="password" value={authForm.password} onChange={e => setAuthForm({...authForm, password: e.target.value})} className="w-full bg-slate-50 px-5 py-4 rounded-2xl font-bold text-slate-900 border border-slate-100 outline-none focus:ring-2 focus:ring-orange-500/20 mt-1 transition-all" placeholder="••••••••" />
-            </div>
+            <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Email Address</label><input required type="email" value={authForm.email} onChange={e => setAuthForm({...authForm, email: e.target.value})} className="w-full bg-slate-50 px-5 py-4 rounded-2xl font-bold text-slate-900 border border-slate-100 outline-none focus:ring-2 focus:ring-orange-500/20 mt-1 transition-all" placeholder="juan@example.com" /></div>
+            <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Password</label><input required type="password" value={authForm.password} onChange={e => setAuthForm({...authForm, password: e.target.value})} className="w-full bg-slate-50 px-5 py-4 rounded-2xl font-bold text-slate-900 border border-slate-100 outline-none focus:ring-2 focus:ring-orange-500/20 mt-1 transition-all" placeholder="••••••••" /></div>
 
             <button disabled={authLoading} type="submit" className="w-full py-4 mt-2 bg-orange-600 text-white font-black rounded-2xl shadow-xl shadow-orange-600/20 uppercase text-xs tracking-widest hover:scale-[1.02] active:scale-95 transition-all">
               {authLoading ? 'Please wait...' : (appState === 'login' ? 'Sign In' : 'Sign Up')}
             </button>
-
-            <div className="text-center mt-1">
-              <button type="button" onClick={() => setAppState(appState === 'login' ? 'register' : 'login')} className="text-xs font-bold text-slate-400 hover:text-orange-500 transition-colors">
-                {appState === 'login' ? "Don't have an account? Sign Up" : "Already have an account? Sign In"}
-              </button>
-            </div>
-            
+            <div className="text-center mt-1"><button type="button" onClick={() => setAppState(appState === 'login' ? 'register' : 'login')} className="text-xs font-bold text-slate-400 hover:text-orange-500 transition-colors">{appState === 'login' ? "Don't have an account? Sign Up" : "Already have an account? Sign In"}</button></div>
             <div className="flex items-center gap-4 my-2"><div className="h-px bg-slate-100 flex-1"></div><span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">OR</span><div className="h-px bg-slate-100 flex-1"></div></div>
-            <button type="button" onClick={handleGuestLogin} className="w-full py-4 bg-slate-50 text-slate-600 font-black rounded-2xl border border-slate-200 uppercase text-xs tracking-widest hover:bg-slate-100 active:scale-95 transition-all">Continue as Guest</button>
+            <button type="button" onClick={handleGuestLogin} className="relative z-20 w-full py-4 bg-slate-900/5 hover:bg-slate-900/10 text-slate-700 font-black rounded-2xl border border-slate-200 uppercase text-xs tracking-widest active:scale-95 transition-all shadow-sm">Continue as Guest</button>
           </form>
         </div>
       </div>
@@ -424,25 +453,10 @@ export default function App() {
   }
 
   const renderAdmin = () => {
-    const filteredUsers = usersList.filter(u => u.username.toLowerCase().includes(adminSearch.toLowerCase()) || u.email.toLowerCase().includes(adminSearch.toLowerCase()));
-    const filteredHacks = hacks.filter(h => h.title.toLowerCase().includes(adminSearch.toLowerCase()) || h.user.toLowerCase().includes(adminSearch.toLowerCase()));
-
-    const pendingHacksCount = hacks.filter(h => h.status === 'pending').length;
-    const pendingReportsCount = reportsList.filter(r => r.status === 'pending').length;
-    const pendingBusinessCount = businessRequests.filter(b => b.status === 'pending').length;
-
-    const activeUsersCount = usersList.filter(u => u.status === 'active').length;
-    const inactiveUsersCount = usersList.filter(u => u.status === 'inactive').length;
-
     const adminNavTabs = [
-      { id: 'dashboard', icon: Activity, label: 'Dashboard' },
-      { id: 'users', icon: Users, label: 'Users' },
-      { id: 'hacks', icon: Utensils, label: `Hacks (${pendingHacksCount})` },
-      { id: 'reports', icon: AlertTriangle, label: `Reports (${pendingReportsCount})` },
-      { id: 'business', icon: Store, label: `Business (${pendingBusinessCount})` },
-      { id: 'messages', icon: MessageSquare, label: 'Messages' },
-      { id: 'analytics', icon: BarChart3, label: 'Analytics' },
-      { id: 'settings', icon: Settings, label: 'Settings' }
+      { id: 'dashboard', icon: Activity, label: 'Overview' },
+      { id: 'map', icon: MapIcon, label: 'Map View' },
+      { id: 'users', icon: Users, label: 'Users' }
     ];
 
     return (
@@ -459,7 +473,7 @@ export default function App() {
             {adminNavTabs.map(tab => {
               const Icon = tab.icon;
               return (
-                <button key={tab.id} onClick={() => setAdminTab(tab.id)} className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest whitespace-nowrap transition-all ${adminTab === tab.id ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                <button key={tab.id} onClick={() => setAdminTab(tab.id)} className={`shrink-0 flex items-center gap-1.5 px-4 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest whitespace-nowrap transition-all ${adminTab === tab.id ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
                   <Icon size={14}/> {tab.label}
                 </button>
               );
@@ -467,290 +481,47 @@ export default function App() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5 space-y-6 bg-slate-100">
-          
+        <div className="flex-1 overflow-y-auto bg-slate-100 flex flex-col">
           {adminTab === 'dashboard' && (
-            <div className="space-y-4 animate-in fade-in">
+            <div className="p-5 space-y-4 animate-in fade-in">
               <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-2">Community Overview</h3>
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200"><div className="text-slate-400 mb-1"><Users size={20}/></div><div className="text-2xl font-black text-slate-800">{usersList.length}</div><div className="text-[10px] font-bold text-slate-500 uppercase">Total Users</div></div>
-                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200"><div className="text-green-500 mb-1"><Activity size={20}/></div><div className="text-2xl font-black text-slate-800">{activeUsersCount} / {inactiveUsersCount}</div><div className="text-[10px] font-bold text-slate-500 uppercase">Active / Inactive</div></div>
-                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200"><div className="text-orange-500 mb-1"><Utensils size={20}/></div><div className="text-2xl font-black text-slate-800">{hacks.length}</div><div className="text-[10px] font-bold text-slate-500 uppercase">Total Hacks Posted</div></div>
-                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200"><div className="text-amber-500 mb-1"><Store size={20}/></div><div className="text-2xl font-black text-slate-800">{pendingBusinessCount}</div><div className="text-[10px] font-bold text-slate-500 uppercase">Pending Business</div></div>
-              </div>
-              <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex justify-between items-center mt-4">
-                <div>
-                  <h4 className="font-bold text-red-600 flex items-center gap-2"><AlertTriangle size={18}/> Verification Queue</h4>
-                  <p className="text-[10px] font-medium text-slate-500">Users waiting for approval.</p>
-                </div>
-                <div className="text-xl font-black text-slate-800">{usersList.filter(u => !u.isVerified).length}</div>
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200"><div className="text-orange-500 mb-1"><Utensils size={20}/></div><div className="text-2xl font-black text-slate-800">{hacks.length}</div><div className="text-[10px] font-bold text-slate-500 uppercase">Total Hacks</div></div>
               </div>
             </div>
           )}
-
-          {adminTab === 'users' && (
-            <div className="space-y-4 animate-in fade-in">
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                  <input type="text" placeholder="Search users by name or email..." value={adminSearch} onChange={(e) => setAdminSearch(e.target.value)} className="w-full bg-white border border-slate-200 py-3 pl-10 pr-4 rounded-xl font-medium text-sm focus:outline-none focus:border-orange-500 text-slate-900" />
-                </div>
-                <button onClick={exportCSV} className="p-3 bg-green-50 text-green-600 rounded-xl hover:bg-green-100 transition-colors border border-green-200 shadow-sm" title="Export to Excel (CSV)"><FileSpreadsheet size={20} /></button>
-                <button onClick={exportXML} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors border border-blue-200 shadow-sm" title="Export XML"><FileCode2 size={20} /></button>
-              </div>
-
-              {filteredUsers.map(u => (
-                <div key={u.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="font-black text-slate-800 text-base flex items-center gap-1">{u.username} {u.isVerified && <CheckCircle size={14} className="text-blue-500"/>}</h4>
-                      <p className="text-[10px] font-bold text-slate-400">{u.email} • {u.points} pts • {u.warnings} Warns</p>
-                    </div>
-                    <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase border ${u.status === 'active' ? 'bg-green-50 text-green-700 border-green-200' : u.status === 'shadowbanned' ? 'bg-slate-100 text-slate-600 border-slate-300' : 'bg-red-50 text-red-700 border-red-200'}`}>{u.status}</span>
-                  </div>
-                  <div className="flex gap-2 flex-wrap mt-1">
-                    {!u.isVerified && <button onClick={() => adminVerifyUser(u.id)} className="bg-blue-50 text-blue-600 border border-blue-200 font-bold py-1.5 px-3 rounded-lg text-xs hover:bg-blue-100">Verify</button>}
-                    <button onClick={() => adminWarnUser(u.id)} className="bg-amber-50 text-amber-600 border border-amber-200 font-bold py-1.5 px-3 rounded-lg text-xs hover:bg-amber-100">Warn</button>
-                    <button onClick={() => adminChangeUserStatus(u.id, u.status === 'shadowbanned' ? 'active' : 'shadowbanned')} className="bg-slate-100 text-slate-600 border border-slate-300 font-bold py-1.5 px-3 rounded-lg text-xs hover:bg-slate-200"><EyeOff size={12} className="inline mr-1 mb-0.5"/>{u.status === 'shadowbanned' ? 'Un-Shadowban' : 'Shadowban'}</button>
-                    <button onClick={() => adminChangeUserStatus(u.id, u.status === 'banned' ? 'active' : 'banned')} className="bg-red-50 text-red-600 border border-red-200 font-bold py-1.5 px-3 rounded-lg text-xs hover:bg-red-100"><Ban size={12} className="inline mr-1 mb-0.5"/>{u.status === 'banned' ? 'Unban' : 'Ban'}</button>
-                    <button onClick={() => adminDeleteUser(u.id)} className="p-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 ml-auto"><Trash2 size={16}/></button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {adminTab === 'hacks' && (
-            <div className="space-y-4 animate-in fade-in">
-              <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input type="text" placeholder="Search hacks..." value={adminSearch} onChange={(e) => setAdminSearch(e.target.value)} className="w-full bg-white border border-slate-200 py-3 pl-10 pr-4 rounded-xl font-medium text-sm focus:outline-none focus:border-orange-500 text-slate-900" />
-              </div>
-              {filteredHacks.map(hack => (
-                <div key={hack.id} className={`bg-white p-4 rounded-2xl shadow-sm border ${hack.status === 'pending' ? 'border-amber-300 bg-amber-50/30' : 'border-slate-200'}`}>
-                  <div className="flex justify-between items-start mb-2">
-                    <h4 className="font-black text-slate-800 flex items-center gap-2">{hack.title} {hack.isPinned && <Pin size={14} className="text-orange-500 fill-orange-500"/>}</h4>
-                    <span className={`px-2 py-1 rounded text-[9px] font-black uppercase ${hack.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>{hack.status}</span>
-                  </div>
-                  <p className="text-sm text-slate-600 mb-3">{hack.desc}</p>
-                  <p className="text-xs font-bold text-slate-400 mb-4">By: {hack.user} • Saves ₱{hack.savings}</p>
-                  
-                  <div className="flex gap-2 flex-wrap">
-                    {hack.status === 'pending' && <button onClick={() => adminApproveHack(hack.id)} className="flex-1 bg-green-500 text-white font-bold py-2 px-3 rounded-lg text-xs hover:bg-green-600">Approve</button>}
-                    <button onClick={() => adminTogglePin(hack.id)} className="bg-slate-100 text-slate-700 font-bold py-2 px-3 rounded-lg text-xs hover:bg-slate-200 border border-slate-200">{hack.isPinned ? 'Unpin' : 'Pin to Top'}</button>
-                    <button onClick={() => adminRejectHack(hack.id)} className="bg-red-50 text-red-600 font-bold py-2 px-3 rounded-lg text-xs hover:bg-red-100 border border-red-100">Delete</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {adminTab === 'reports' && (
-            <div className="space-y-4 animate-in fade-in">
-              <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-2">Reported Content Queue</h3>
-              {reportsList.filter(r => r.status === 'pending').length === 0 ? (
-                <p className="text-center text-slate-400 font-bold py-8 bg-white rounded-2xl border border-slate-200 border-dashed">Queue is clear.</p>
-              ) : (
-                reportsList.filter(r => r.status === 'pending').map(rep => (
-                  <div key={rep.id} className="bg-white p-4 rounded-2xl shadow-sm border border-red-200 border-l-4 border-l-red-500">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-[10px] font-black uppercase text-red-500 tracking-widest flex items-center gap-1"><AlertOctagon size={12}/> {rep.type} Report</span>
-                      <span className="text-[10px] text-slate-400 font-bold">By: {rep.reportedBy}</span>
-                    </div>
-                    <p className="text-sm font-bold text-slate-800 mb-3">"{rep.reason}"</p>
-                    <div className="flex gap-2">
-                      <button onClick={() => adminResolveReport(rep.id, 'delete')} className="flex-1 bg-red-50 text-red-600 font-bold py-2 rounded-xl text-xs border border-red-200 hover:bg-red-100">Remove Content</button>
-                      <button onClick={() => adminWarnUser(rep.targetId)} className="flex-1 bg-amber-50 text-amber-600 font-bold py-2 rounded-xl text-xs border border-amber-200 hover:bg-amber-100">Warn User</button>
-                      <button onClick={() => adminResolveReport(rep.id, 'ignore')} className="flex-1 bg-slate-100 text-slate-600 font-bold py-2 rounded-xl text-xs hover:bg-slate-200">Dismiss</button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-
-          {adminTab === 'business' && (
-            <div className="space-y-6 animate-in fade-in">
-              <div>
-                <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-3">Pending Requests</h3>
-                {businessRequests.filter(b => b.status === 'pending').length === 0 ? (
-                  <p className="text-center text-slate-400 font-bold py-4 bg-white rounded-2xl border border-slate-200 border-dashed">No pending business requests.</p>
-                ) : (
-                  businessRequests.filter(b => b.status === 'pending').map(req => (
-                    <div key={req.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-3">
-                      <h4 className="font-black text-slate-800">{req.restaurant} Claim</h4>
-                      <p className="text-sm text-slate-600 mt-1 mb-3">Requested by: <span className="font-bold text-slate-800">{req.user}</span> ({req.email})</p>
-                      <p className="text-xs font-bold text-slate-400 mb-4">Submitted: {req.date}</p>
-                      <div className="flex gap-2">
-                        <button onClick={() => adminApproveBusiness(req)} className="flex-1 bg-green-500 text-white font-bold py-2 rounded-xl flex justify-center items-center gap-1 hover:bg-green-600"><Check size={16}/> Approve</button>
-                        <button onClick={() => adminRejectBusiness(req.id)} className="flex-1 bg-red-100 text-red-600 font-bold py-2 rounded-xl flex justify-center items-center gap-1 hover:bg-red-200"><X size={16}/> Reject</button>
+          {adminTab === 'map' && (
+            <div className="flex-1 relative animate-in fade-in flex flex-col min-h-[60vh] p-4">
+              <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-2">Location Radar</h3>
+              <div className="flex-1 rounded-2xl overflow-hidden shadow-inner border border-slate-200 relative bg-slate-200">
+                {leafletReady && (
+                  <LeafletMap 
+                    center={mapCenter} 
+                    userLocation={userLoc}
+                    markers={[
+                      ...restaurants.map(r => ({...r, type: 'business'})),
+                      ...usersList.filter(u => u.lat && u.lng).map(u => ({...u, type: 'user'}))
+                    ]}
+                    onMarkerClick={(m) => setAdminSelectedMarker(m)}
+                    onRecenter={handleGetLocation}
+                  />
+                )}
+                {adminSelectedMarker && (
+                  <div className="absolute bottom-4 left-4 right-4 z-[400] bg-white p-4 rounded-xl shadow-2xl border border-slate-200 flex justify-between items-center animate-in slide-in-from-bottom">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xl border-2 ${adminSelectedMarker.type === 'user' ? 'border-blue-500 bg-blue-50' : 'border-orange-500 bg-orange-50'}`}>{adminSelectedMarker.img}</div>
+                      <div>
+                        <h4 className="font-black text-slate-800 leading-tight">{adminSelectedMarker.name || adminSelectedMarker.username}</h4>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{adminSelectedMarker.type}</p>
                       </div>
                     </div>
-                  ))
+                    <button onClick={() => setAdminSelectedMarker(null)} className="p-2 bg-slate-100 rounded-full text-slate-500"><X size={16}/></button>
+                  </div>
                 )}
               </div>
-
-              <div>
-                <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-3">Active Business Profiles</h3>
-                {activeBusinesses.map(bus => (
-                  <div key={bus.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-3">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h4 className="font-black text-slate-800 text-base flex items-center gap-1">{bus.restaurant} <CheckCircle size={14} className="text-blue-500"/></h4>
-                        <p className="text-[10px] font-bold text-slate-400">{bus.email}</p>
-                      </div>
-                      <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-blue-200">Verified</span>
-                    </div>
-                    <div className="flex gap-4 mt-3 pt-3 border-t border-slate-100">
-                      <div className="text-center"><p className="text-[10px] font-bold text-slate-400 uppercase">Profile Views</p><p className="font-black text-slate-800">{bus.views}</p></div>
-                      <div className="text-center"><p className="text-[10px] font-bold text-slate-400 uppercase">Active Promos</p><p className="font-black text-slate-800">{bus.promosActive}</p></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
             </div>
           )}
-
-          {adminTab === 'messages' && (
-            <div className="space-y-6 animate-in fade-in">
-              <div className="bg-gradient-to-br from-indigo-500 to-blue-600 p-5 rounded-2xl shadow-lg text-white">
-                <h4 className="font-black flex items-center gap-2 mb-3"><Megaphone size={18}/> Broadcast Announcement</h4>
-                <form onSubmit={sendBroadcast}>
-                  <textarea required value={broadcastInput} onChange={e => setBroadcastInput(e.target.value)} rows={2} placeholder="Write a message to all users..." className="w-full bg-white/10 border border-white/20 px-4 py-3 rounded-xl text-sm placeholder-white/50 text-white focus:outline-none focus:ring-2 focus:ring-white/50 resize-none mb-3"></textarea>
-                  <button type="submit" className="w-full bg-white text-blue-600 font-black py-3 rounded-xl shadow-md hover:scale-[1.02] active:scale-95 transition-transform text-xs uppercase tracking-widest">Push Notification</button>
-                </form>
-              </div>
-
-              <div>
-                <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-3">Admin Inbox</h3>
-                <div className="space-y-3">
-                  {inboxMessages.map(msg => (
-                    <div key={msg.id} className={`bg-white p-4 rounded-2xl shadow-sm border ${msg.isRead ? 'border-slate-200 opacity-70' : 'border-blue-200 border-l-4 border-l-blue-500'}`}>
-                      <div className="flex justify-between items-start mb-1">
-                        <h4 className="font-bold text-slate-800 text-sm">{msg.subject}</h4>
-                        <span className="text-[10px] font-bold text-slate-400">{msg.date}</span>
-                      </div>
-                      <p className="text-[10px] font-black uppercase text-slate-400 mb-2">From: {msg.from}</p>
-                      <p className="text-xs text-slate-600 line-clamp-2 mb-3">{msg.body}</p>
-                      <button className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">Reply Direct</button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {adminTab === 'analytics' && (
-            <div className="space-y-6 animate-in fade-in">
-              <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-                <h4 className="font-black text-slate-800 flex items-center gap-2 mb-4"><TrendingUp size={18} className="text-green-500"/> User Growth (7 Days)</h4>
-                <div className="flex items-end gap-2 h-32 border-b border-slate-100 pb-2">
-                  {[40, 60, 45, 80, 55, 90, 100].map((h, i) => (
-                    <div key={i} className="flex-1 bg-orange-500 rounded-t-sm" style={{ height: `${h}%` }}></div>
-                  ))}
-                </div>
-                <div className="flex justify-between text-[8px] font-black uppercase text-slate-400 mt-2">
-                  <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
-                </div>
-              </div>
-
-              <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-                <h4 className="font-black text-slate-800 flex items-center gap-2 mb-4"><Trophy size={18} className="text-yellow-500"/> Top Contributors</h4>
-                <div className="space-y-3">
-                  {usersList.sort((a,b) => b.points - a.points).slice(0, 3).map((u, i) => (
-                    <div key={u.id} className="flex items-center justify-between border-b border-slate-100 pb-2 last:border-0 last:pb-0">
-                      <div className="flex items-center gap-3">
-                        <div className="font-black text-slate-300 w-4">{i + 1}</div>
-                        <div><p className="font-bold text-slate-800 text-sm">{u.username}</p><p className="text-[10px] font-bold text-slate-400 uppercase">{u.posts} Posts</p></div>
-                      </div>
-                      <div className="text-orange-600 font-black text-sm">{u.points} pts</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {adminTab === 'settings' && (
-            <div className="space-y-6 animate-in fade-in">
-              
-              {/* Me Panel / Admin Profile */}
-              <div>
-                <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-3">Admin Profile (Me)</h3>
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="w-16 h-16 bg-slate-900 rounded-full flex items-center justify-center text-2xl text-white border-2 border-orange-500 shadow-lg">👑</div>
-                    <div>
-                      <h4 className="font-black text-slate-800 text-xl">SuperAdmin</h4>
-                      <p className="text-xs font-bold text-slate-500">admin@tipidmenu.ph</p>
-                      <span className="inline-block mt-1 bg-red-100 text-red-700 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-red-200">Role: Root Admin</span>
-                    </div>
-                  </div>
-                  <div className="space-y-2 border-t border-slate-100 pt-4">
-                    <p className="text-xs font-bold text-slate-500 flex justify-between"><span>Last Login:</span> <span className="text-slate-800">{new Date().toLocaleString()}</span></p>
-                    <p className="text-xs font-bold text-slate-500 flex justify-between"><span>2FA Status:</span> <span className="text-green-600">Enabled</span></p>
-                  </div>
-                  <div className="flex gap-2 mt-4">
-                    <button className="flex-1 bg-slate-100 text-slate-700 font-bold py-2 rounded-xl text-xs hover:bg-slate-200 border border-slate-200">Change Password</button>
-                    <button className="flex-1 bg-slate-100 text-slate-700 font-bold py-2 rounded-xl text-xs hover:bg-slate-200 border border-slate-200">Notification Prefs</button>
-                  </div>
-                </div>
-              </div>
-
-              {/* App Configuration */}
-              <div>
-                <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-3">App Configuration</h3>
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                  <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-                    <div>
-                      <h4 className="font-bold text-slate-800">Auto-Approve Hacks</h4>
-                      <p className="text-[10px] font-medium text-slate-500">Skip the moderation queue for new posts.</p>
-                    </div>
-                    <button onClick={() => toggleSetting('autoApproveHacks')} className={`w-12 h-6 rounded-full p-1 transition-colors duration-200 ${appSettings.autoApproveHacks ? 'bg-green-500' : 'bg-slate-300'}`}>
-                      <div className={`w-4 h-4 bg-white rounded-full transition-transform duration-200 ${appSettings.autoApproveHacks ? 'translate-x-6' : 'translate-x-0'}`}></div>
-                    </button>
-                  </div>
-                  <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-                    <div>
-                      <h4 className="font-bold text-slate-800">Require Verification to Post</h4>
-                      <p className="text-[10px] font-medium text-slate-500">Users must verify OTP to post hacks.</p>
-                    </div>
-                    <button onClick={() => toggleSetting('requireOTP')} className={`w-12 h-6 rounded-full p-1 transition-colors duration-200 ${appSettings.requireOTP ? 'bg-green-500' : 'bg-slate-300'}`}>
-                      <div className={`w-4 h-4 bg-white rounded-full transition-transform duration-200 ${appSettings.requireOTP ? 'translate-x-6' : 'translate-x-0'}`}></div>
-                    </button>
-                  </div>
-                  
-                  <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-                    <div>
-                      <h4 className="font-bold text-slate-800">Daily Post Limit</h4>
-                      <p className="text-[10px] font-medium text-slate-500">Max hacks a user can post per day.</p>
-                    </div>
-                    <input type="number" value={appSettings.dailyPostLimit} onChange={(e) => updateSettingValue('dailyPostLimit', e.target.value)} className="w-16 bg-slate-50 border border-slate-200 rounded-lg text-center font-bold text-sm py-1 outline-none focus:border-orange-500"/>
-                  </div>
-                  
-                  <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-                    <div>
-                      <h4 className="font-bold text-slate-800">Reward Point Multiplier</h4>
-                      <p className="text-[10px] font-medium text-slate-500">Adjust points given (e.g. 2x for events).</p>
-                    </div>
-                    <input type="number" step="0.1" value={appSettings.rewardMultiplier} onChange={(e) => updateSettingValue('rewardMultiplier', e.target.value)} className="w-16 bg-slate-50 border border-slate-200 rounded-lg text-center font-bold text-sm py-1 outline-none focus:border-orange-500"/>
-                  </div>
-
-                  <div className="p-4 flex justify-between items-center bg-red-50/50">
-                    <div>
-                      <h4 className="font-bold text-red-600">Maintenance Mode</h4>
-                      <p className="text-[10px] font-medium text-red-500/70">Block access to non-admin users.</p>
-                    </div>
-                    <button onClick={() => toggleSetting('maintenanceMode')} className={`w-12 h-6 rounded-full p-1 transition-colors duration-200 ${appSettings.maintenanceMode ? 'bg-red-500' : 'bg-slate-300'}`}>
-                      <div className={`w-4 h-4 bg-white rounded-full transition-transform duration-200 ${appSettings.maintenanceMode ? 'translate-x-6' : 'translate-x-0'}`}></div>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          )}
-
         </div>
       </div>
     );
@@ -758,20 +529,12 @@ export default function App() {
 
   const renderHeader = () => (
     <header className="bg-white px-5 py-4 shadow-sm z-20 flex justify-between items-center sticky top-0">
-      <h1 
-        onClick={handleLogoTap} 
-        className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-amber-500 italic uppercase tracking-tighter select-none cursor-pointer"
-      >
+      <h1 onClick={handleLogoTap} className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-amber-500 italic uppercase tracking-tighter select-none cursor-pointer">
         Tipid Menu
       </h1>
       <div className="flex items-center gap-3">
-        {/* Properly Sized & Aligned Admin Command Center Button */}
         {userData.isAdmin && (
-          <button 
-            onClick={() => setActiveView('admin')} 
-            className="w-10 h-10 bg-slate-900 text-orange-400 rounded-full flex items-center justify-center shadow-md hover:bg-slate-800 transition-colors active:scale-95 border border-slate-700"
-            title="Command Center"
-          >
+          <button onClick={() => setActiveView('admin')} className="w-10 h-10 bg-slate-900 text-orange-400 rounded-full flex items-center justify-center shadow-md hover:bg-slate-800 transition-colors active:scale-95 border border-slate-700 shrink-0" title="Command Center">
             <Shield size={20} />
           </button>
         )}
@@ -788,6 +551,7 @@ export default function App() {
 
   const renderTabBar = () => (
     <nav className="bg-white/80 backdrop-blur-xl border-t border-slate-100 px-6 py-3 flex justify-between items-center sticky bottom-0 z-30 pb-safe">
+      <button onClick={() => setCurrentTab('map')} className={`flex flex-col items-center gap-1.5 transition-colors ${currentTab === 'map' ? 'text-orange-600' : 'text-slate-300'}`}><MapPinIcon size={22} /><span className="text-[10px] font-black uppercase tracking-widest">Near</span></button>
       <button onClick={() => setCurrentTab('spots')} className={`flex flex-col items-center gap-1.5 transition-colors ${currentTab === 'spots' ? 'text-orange-600' : 'text-slate-300'}`}><List size={22} /><span className="text-[10px] font-black uppercase tracking-widest">Spots</span></button>
       <button onClick={() => { if(selectedRes) setShowAddHackModal(true); else setCurrentTab('spots'); }} className="bg-gradient-to-br from-orange-500 to-amber-500 p-4 rounded-full text-white shadow-xl shadow-orange-500/30 transform -translate-y-6 hover:scale-110 active:scale-95 transition-all"><Plus size={24}/></button>
       <button onClick={() => setCurrentTab('pro')} className={`flex flex-col items-center gap-1.5 transition-colors ${currentTab === 'pro' ? 'text-orange-600' : 'text-slate-300'}`}><Zap size={22} className={currentTab === 'pro' ? 'fill-orange-50' : ''}/><span className="text-[10px] font-black uppercase tracking-widest">PRO</span></button>
@@ -795,22 +559,26 @@ export default function App() {
     </nav>
   );
 
+  const renderMap = () => (
+    <div className="flex-1 relative bg-[#E2E8F0] overflow-hidden">
+      {leafletReady ? (
+        <LeafletMap 
+          center={mapCenter} 
+          userLocation={userLoc}
+          markers={restaurants.map(r => ({...r, type: 'business'}))}
+          onMarkerClick={(m) => { setSelectedRes(m); setActiveView('restaurant'); }}
+          onRecenter={handleGetLocation}
+        />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center bg-slate-100"><p className="font-bold text-slate-500 animate-pulse">Loading Map Engine...</p></div>
+      )}
+    </div>
+  );
+
   const renderSpots = () => {
     const filtered = restaurants.filter(r => r.name.toLowerCase().includes(searchQuery.toLowerCase()));
     return (
       <div className="flex-1 overflow-y-auto bg-slate-50 p-5 pb-24">
-        {/* Global Announcement Banner */}
-        {globalAnnouncement && (
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4 rounded-2xl shadow-lg mb-6 flex gap-3 items-start animate-in slide-in-from-top">
-            <Bell size={20} className="shrink-0 mt-0.5"/>
-            <div>
-              <h4 className="font-black text-xs uppercase tracking-widest mb-1 opacity-80">Announcement</h4>
-              <p className="font-bold text-sm">{globalAnnouncement}</p>
-            </div>
-            <button onClick={() => setGlobalAnnouncement('')} className="shrink-0 text-white/50 hover:text-white"><X size={16}/></button>
-          </div>
-        )}
-
         <div className="relative mb-6">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
           <input type="text" placeholder="Search restaurants, brands..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white border border-slate-200 py-3.5 pl-12 pr-4 rounded-2xl font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 shadow-sm transition-all" />
@@ -818,9 +586,15 @@ export default function App() {
         <h3 className="font-black text-slate-800 mb-6 uppercase tracking-widest text-sm flex items-center gap-2"><List size={18} className="text-orange-500" /> Discover Spots</h3>
         <div className="space-y-3">
           {filtered.map(res => (
-            <div key={res.id} onClick={() => { setSelectedRes(res); setActiveView('restaurant'); }} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 cursor-pointer hover:border-orange-200 transition-colors group active:scale-[0.98]">
-              <div className="w-14 h-14 bg-orange-50 rounded-xl flex items-center justify-center text-3xl border border-orange-100">{res.img}</div>
-              <div className="flex-1"><h4 className="font-black text-slate-800 group-hover:text-orange-600 transition-colors">{res.name}</h4><p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{res.category}</p></div>
+            <div key={res.id} onClick={() => { setSelectedRes(res); setActiveView('restaurant'); }} className={`bg-white p-4 rounded-2xl shadow-sm border flex items-center gap-4 cursor-pointer transition-colors group active:scale-[0.98] ${res.isPromoted ? 'border-amber-300 shadow-[0_0_15px_rgba(251,191,36,0.15)] bg-amber-50/20' : 'border-slate-100 hover:border-orange-200'}`}>
+              <div className={`w-14 h-14 rounded-xl flex items-center justify-center text-3xl border ${res.isPromoted ? 'bg-gradient-to-br from-amber-100 to-yellow-200 border-amber-300' : 'bg-orange-50 border-orange-100'}`}>{res.img}</div>
+              <div className="flex-1">
+                <h4 className="font-black text-slate-800 group-hover:text-orange-600 transition-colors flex items-center gap-2">
+                  {res.name}
+                  {res.isPromoted && <span className="bg-amber-500 text-white text-[8px] px-1.5 py-0.5 rounded font-black uppercase tracking-widest">AD</span>}
+                </h4>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{res.category}</p>
+              </div>
               <ChevronRight className="text-slate-300" size={20} />
             </div>
           ))}
@@ -841,9 +615,21 @@ export default function App() {
     return (
       <div className="flex-1 overflow-y-auto bg-slate-50 pb-8 animate-in slide-in-from-right duration-300">
         <div className="bg-white px-5 pt-4 pb-6 shadow-sm sticky top-0 z-10 flex flex-col gap-4">
-          <button onClick={() => setActiveView('main')} className="flex items-center gap-2 text-slate-500 font-bold hover:text-slate-800"><X size={20} /> Back</button>
+          <button onClick={() => setActiveView('main')} className="flex items-center gap-2 text-slate-500 font-bold hover:text-slate-800 w-fit"><X size={20} /> Back</button>
+          
+          {/* Mini-Map Preview */}
+          <div className="h-32 w-full rounded-2xl overflow-hidden shadow-inner border border-slate-200 relative bg-slate-100 z-0">
+            {leafletReady && (
+              <LeafletMap 
+                center={{ lat: selectedRes.lat, lng: selectedRes.lng }}
+                markers={[{...selectedRes, type: 'business'}]}
+                mini={true}
+              />
+            )}
+          </div>
+
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center text-3xl border border-orange-100 shadow-inner">{selectedRes.img}</div>
+            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl border shadow-sm ${selectedRes.isPromoted ? 'bg-gradient-to-br from-amber-100 to-yellow-200 border-amber-300' : 'bg-orange-50 border-orange-100'}`}>{selectedRes.img}</div>
             <div>
               <h2 className="text-2xl font-black text-slate-800">{selectedRes.name}</h2>
               <div className="flex items-center gap-2 mt-1"><span className="text-xs font-bold text-slate-400 uppercase tracking-wide">{selectedRes.category} • ⭐ {selectedRes.rating}</span></div>
@@ -903,11 +689,6 @@ export default function App() {
             </div>
           </section>
 
-          <div className="mt-8 pt-6 border-t border-slate-200">
-            <button onClick={() => setShowBusinessModal(true)} className="w-full bg-white text-slate-600 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-slate-50 transition-colors border border-slate-200 text-sm shadow-sm">
-              <Info size={18} /> Are you the manager? Claim Spot
-            </button>
-          </div>
         </div>
       </div>
     );
@@ -918,17 +699,28 @@ export default function App() {
       <div className="bg-white rounded-[32px] p-8 shadow-sm border border-slate-100 flex flex-col items-center text-center mb-6">
         <div className="w-28 h-28 bg-orange-50 rounded-full flex items-center justify-center text-6xl mb-4 border-4 border-white shadow-xl shadow-orange-500/10 relative group">
           {userData.avatar}
-          <button onClick={() => { setEditForm({ username: userData.username, avatar: userData.avatar }); setShowEditProfileModal(true); }} className="absolute bottom-0 right-0 p-2 bg-orange-500 text-white rounded-full border-2 border-white shadow-lg active:scale-110 transition-transform"><Edit size={14} /></button>
+          <button onClick={handleOpenEditProfile} className="absolute bottom-0 right-0 p-2 bg-orange-500 text-white rounded-full border-2 border-white shadow-lg active:scale-110 transition-transform"><Edit size={14} /></button>
         </div>
-        <h3 className="text-2xl font-black text-slate-800 flex items-center gap-2">{userData.username} {userData.isVerified && <CheckCircle size={20} className="text-blue-500" />}</h3>
-        <div className={`mt-4 px-5 py-2 rounded-full border flex items-center gap-2 font-black text-xs uppercase tracking-widest ${userTier.bg} ${userTier.color} ${userTier.border}`}>{userTier.icon} {userTier.name} • {userData.points} pts</div>
+        <h3 className="text-2xl font-black text-slate-800 flex items-center gap-2">
+          {userData.username} {userData.isVerified && <CheckCircle size={20} className="text-blue-500" />}
+        </h3>
+        <div className={`mt-4 px-5 py-2 rounded-full border flex items-center gap-2 font-black text-xs uppercase tracking-widest ${userTier.bg} ${userTier.color} ${userTier.border}`}>
+          {userTier.icon} {userTier.name} • {userData.points} pts
+        </div>
       </div>
-      
+
       {!userData.isVerified && (
         <div className="bg-gradient-to-br from-orange-500 to-amber-500 rounded-[32px] p-6 text-white mb-6 shadow-xl shadow-orange-500/20"><h4 className="font-black text-xl mb-2">Verify Account</h4><p className="text-white/80 text-sm font-medium mb-4">Complete your verification to post hacks and unlock +100 Bonus Points.</p><button onClick={() => setShowVerifyModal(true)} className="w-full py-3.5 bg-white text-orange-600 font-black rounded-2xl shadow-lg hover:scale-[1.02] active:scale-95 transition-all">Start Verification</button></div>
       )}
       
       <div className="grid grid-cols-2 gap-4 mb-6"><div className="bg-white p-6 rounded-3xl border border-slate-100 text-center shadow-sm"><Share2 size={24} className="mx-auto mb-2 text-slate-300"/><div className="text-2xl font-black text-slate-800">{userData.hacksCount}</div><div className="text-[10px] font-black uppercase text-slate-400">Hacks Shared</div></div><div className="bg-white p-6 rounded-3xl border border-slate-100 text-center shadow-sm"><div className="text-2xl font-black text-green-500 mb-2">₱</div><div className="text-2xl font-black text-slate-800">{userData.totalSavings}</div><div className="text-[10px] font-black uppercase text-slate-400">Total Savings Shared</div></div></div>
+
+      <div className="bg-white rounded-[32px] p-6 shadow-sm border border-slate-100 flex flex-col mb-6">
+        <h4 className="font-black text-slate-800 uppercase tracking-widest text-xs mb-4">For Owners</h4>
+        <button onClick={() => { setOwnerTab('new'); setShowBusinessModal(true); }} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-slate-800 transition-colors shadow-lg active:scale-95">
+          <Store size={18} className="text-orange-400"/> Add My Restaurant
+        </button>
+      </div>
     </div>
   );
 
@@ -952,13 +744,17 @@ export default function App() {
         {activeView === 'restaurant' && renderRestaurant()}
         {activeView === 'admin' && renderAdmin()}
         {activeView === 'main' && (
-          <>{currentTab === 'spots' ? renderSpots() : currentTab === 'profile' ? renderProfile() : currentTab === 'pro' ? renderPro() : null}</>
+          <>
+            {currentTab === 'map' && renderMap()}
+            {currentTab === 'spots' && renderSpots()}
+            {currentTab === 'profile' && renderProfile()}
+            {currentTab === 'pro' && renderPro()}
+          </>
         )}
       </main>
       
       {activeView === 'main' && renderTabBar()}
       
-      {/* Toast */}
       {toast && <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-5 py-2.5 rounded-full shadow-2xl z-[200] border border-slate-700 animate-in fade-in slide-in-from-top-4 flex items-center gap-2"><Info size={16} className="text-orange-400" /><p className="font-bold text-sm whitespace-nowrap">{toast}</p></div>}
 
       {/* Secret Admin Modal */}
@@ -996,53 +792,183 @@ export default function App() {
         </div>
       )}
 
-      {/* Add Hack Modal */}
+      {/* Add Hack Modal (Updated to support creating new restaurant) */}
       {showAddHackModal && (
         <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-md sm:rounded-[40px] rounded-t-[40px] p-8 pt-10 shadow-2xl relative max-h-[90vh] flex flex-col animate-in slide-in-from-bottom">
-            <button onClick={() => setShowAddHackModal(false)} className="absolute top-8 right-8 p-2 rounded-full bg-slate-50 text-slate-400 hover:bg-slate-100 active:scale-90 transition-all"><X size={18} /></button>
-            <h3 className="text-2xl font-black mb-2 flex items-center gap-2 tracking-tight text-slate-800">Share Hack</h3>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-8">{selectedRes?.name}</p>
-            <form onSubmit={submitHack} className="space-y-5 overflow-y-auto no-scrollbar pb-6">
-              <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Hack Title</label><input required name="title" className="w-full bg-white px-5 py-4 rounded-2xl font-black text-slate-900 border border-slate-200 shadow-sm mt-1 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400" placeholder="e.g. Solo Gravy Hack" /></div>
-              <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Instructions</label><textarea required name="desc" rows={3} className="w-full bg-white px-5 py-4 rounded-2xl font-medium text-slate-900 border border-slate-200 shadow-sm mt-1 resize-none outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400" placeholder="How do we do it?"></textarea></div>
-              <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Savings (₱)</label><input required name="savings" type="number" className="w-full bg-white px-5 py-4 rounded-2xl font-black text-slate-900 border border-slate-200 shadow-sm mt-1 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400" placeholder="0" /></div>
-              <button type="submit" className="w-full py-5 bg-orange-600 text-white font-black rounded-[24px] shadow-xl shadow-orange-600/20 uppercase text-xs tracking-[0.2em] mt-4 hover:scale-[1.02] active:scale-95 transition-all">Submit for Review</button>
-            </form>
-          </div>
-        </div>
-      )}
+            <button onClick={() => { setShowAddHackModal(false); setIsAddingNewRes(false); }} className="absolute top-8 right-8 p-2 rounded-full bg-slate-50 text-slate-400 hover:bg-slate-100 active:scale-90 transition-all z-10"><X size={18} /></button>
+            
+            {isAddingNewRes ? (
+              <div className="flex-1 overflow-y-auto no-scrollbar pb-6 space-y-4">
+                <div className="mb-6 flex items-center gap-2">
+                  <button onClick={() => setIsAddingNewRes(false)} className="p-1 bg-slate-100 rounded-full text-slate-500 mr-1"><ChevronRight size={16} className="rotate-180" /></button>
+                  <div>
+                    <h3 className="text-xl font-black text-slate-800 tracking-tight">Add Missing Spot</h3>
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mt-0.5">Help the community grow!</p>
+                  </div>
+                </div>
+                
+                <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Restaurant Name</label><input required value={newResForm.name} onChange={e => setNewResForm({...newResForm, name: e.target.value})} className="w-full bg-white px-5 py-4 rounded-2xl font-black text-slate-900 border border-slate-200 shadow-sm mt-1 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400" placeholder="e.g. KFC Tayuman" /></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Address / Branch</label><input required value={newResForm.address} onChange={e => setNewResForm({...newResForm, address: e.target.value})} className="w-full bg-white px-5 py-4 rounded-2xl font-medium text-slate-900 border border-slate-200 shadow-sm mt-1 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400" placeholder="SM City San Lazaro" /></div>
+                
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest flex justify-between items-center mb-1">
+                    Pin Location <span className="text-[9px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded font-bold">Interactive</span>
+                  </label>
+                  <div className="h-40 w-full rounded-2xl overflow-hidden border border-slate-200 relative bg-slate-100 z-0">
+                    {leafletReady && (
+                      <LeafletMap 
+                        center={{lat: newResForm.lat, lng: newResForm.lng}} 
+                        markers={[{lat: newResForm.lat, lng: newResForm.lng, img: '📍', type: 'business'}]}
+                        onMapClick={(latlng) => setNewResForm(prev => ({...prev, lat: latlng.lat, lng: latlng.lng}))}
+                      />
+                    )}
+                    <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[400] bg-slate-900/80 text-white px-3 py-1 rounded-full text-[10px] font-bold shadow-sm backdrop-blur-sm pointer-events-none whitespace-nowrap">Tap map to move pin</div>
+                  </div>
+                </div>
 
-      {/* Edit Profile Modal */}
-      {showEditProfileModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-sm rounded-[40px] p-8 shadow-2xl relative">
-            <button onClick={() => setShowEditProfileModal(false)} className="absolute top-8 right-8 p-2 rounded-full bg-slate-50 text-slate-400 hover:bg-slate-100 active:scale-90 transition-all"><X size={18} /></button>
-            <h3 className="text-2xl font-black mb-8 text-center uppercase tracking-widest text-sm text-slate-400">Update Profile</h3>
-            <form onSubmit={handleUpdateProfile} className="space-y-6">
-              <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Username</label><input required value={editForm.username} onChange={(e) => setEditForm(prev => ({ ...prev, username: e.target.value }))} className="w-full bg-white px-5 py-4 rounded-2xl font-black text-slate-900 border border-slate-200 shadow-sm mt-1 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400" /></div>
-              <div className="grid grid-cols-5 gap-3">
-                {['👤', '🍔', '🍕', '🍗', '🍟', '🧋', '☕', '🍩', '🌮', '🍦'].map(emoji => (
-                  <button key={emoji} type="button" onClick={() => setEditForm(prev => ({ ...prev, avatar: emoji }))} className={`text-2xl p-3 rounded-2xl border-2 transition-all ${editForm.avatar === emoji ? 'bg-orange-50 border-orange-500 scale-110 shadow-lg' : 'bg-white border-slate-200 shadow-sm opacity-60 hover:opacity-100'}`}>{emoji}</button>
-                ))}
+                <button onClick={saveNewRestaurant} className="w-full py-4 bg-slate-900 text-white font-black rounded-2xl shadow-xl uppercase text-xs tracking-widest mt-2 hover:scale-[1.02] active:scale-95 transition-all">Save & Continue</button>
               </div>
-              <button type="submit" className="w-full py-4 bg-orange-500 text-white font-black rounded-2xl shadow-xl uppercase text-xs tracking-widest active:scale-95 transition-all">Save Changes</button>
+            ) : (
+              <div className="flex-1 flex flex-col min-h-0">
+                <div className="mb-6 flex-shrink-0">
+                  <h3 className="text-2xl font-black mb-1 flex items-center gap-2 tracking-tight text-slate-800"><Plus size={24} className="text-orange-500"/> Share Hack</h3>
+                  {selectedRes ? (
+                    <p className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><MapPinIcon size={12} className="text-orange-400"/> {selectedRes.name}</p>
+                  ) : (
+                    <div className="mt-3 relative z-10">
+                      <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-100 rounded-xl mb-3">
+                        <Info size={16} className="text-blue-500 shrink-0"/>
+                        <p className="text-[10px] font-bold text-blue-700 leading-snug">Select a restaurant from the map first, or add a missing spot below.</p>
+                      </div>
+                      <button onClick={() => setIsAddingNewRes(true)} className="w-full py-3 bg-white border border-dashed border-slate-300 text-slate-600 font-bold rounded-xl text-xs hover:bg-slate-50 transition-colors">+ Add Missing Restaurant</button>
+                    </div>
+                  )}
+                </div>
+
+                {selectedRes && (
+                  <form onSubmit={submitHack} className="flex-1 overflow-y-auto no-scrollbar pb-6 space-y-4">
+                    <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Hack Title</label><input required name="title" className="w-full bg-white px-5 py-4 rounded-2xl font-black text-slate-900 border border-slate-200 shadow-sm mt-1 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400" placeholder="e.g. Solo Gravy Hack" /></div>
+                    <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Instructions</label><textarea required name="desc" rows={3} className="w-full bg-white px-5 py-4 rounded-2xl font-medium text-slate-900 border border-slate-200 shadow-sm mt-1 resize-none outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400" placeholder="How do we do it?"></textarea></div>
+                    <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Savings (₱)</label><input required name="savings" type="number" min="0" className="w-full bg-white px-5 py-4 rounded-2xl font-black text-slate-900 border border-slate-200 shadow-sm mt-1 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400" placeholder="0" /></div>
+                    <button type="submit" className="w-full py-5 bg-orange-600 text-white font-black rounded-[24px] shadow-xl shadow-orange-600/20 uppercase text-xs tracking-[0.2em] mt-4 hover:scale-[1.02] active:scale-95 transition-all">Submit for Review</button>
+                  </form>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Expanded Profile Settings Modal */}
+      {showEditProfileModal && (
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white w-full max-w-md sm:rounded-[40px] rounded-t-[40px] p-8 pt-10 shadow-2xl relative max-h-[90vh] flex flex-col animate-in slide-in-from-bottom">
+            <button onClick={() => setShowEditProfileModal(false)} className="absolute top-8 right-8 p-2 rounded-full bg-slate-50 text-slate-400 hover:bg-slate-100 active:scale-90 transition-all z-10"><X size={18} /></button>
+            <div className="mb-6 flex-shrink-0">
+              <h3 className="text-2xl font-black text-slate-800 tracking-tight">Settings</h3>
+              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mt-1">Manage your profile</p>
+            </div>
+            
+            <form onSubmit={handleUpdateProfile} className="flex-1 overflow-y-auto no-scrollbar pb-6 space-y-6">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-2"><User size={16} className="text-orange-500"/><h4 className="font-black text-slate-800 uppercase text-xs tracking-widest">Basic Info</h4></div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Avatar Emoji</label>
+                  <div className="grid grid-cols-5 gap-2 mt-1">
+                    {['👤', '🍔', '🍕', '🍗', '🍟', '🧋', '☕', '🍩', '🌮', '🍦'].map(emoji => (
+                      <button key={emoji} type="button" onClick={() => setEditForm(prev => ({ ...prev, avatar: emoji }))} className={`text-2xl p-2 rounded-xl border-2 transition-all ${editForm.avatar === emoji ? 'bg-orange-50 border-orange-500 scale-110 shadow-sm' : 'bg-white border-slate-200 shadow-sm opacity-60 hover:opacity-100'}`}>{emoji}</button>
+                    ))}
+                  </div>
+                </div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Username</label><input required value={editForm.username} onChange={(e) => setEditForm(prev => ({ ...prev, username: e.target.value }))} className="w-full bg-white px-5 py-4 rounded-2xl font-black text-slate-900 border border-slate-200 shadow-sm mt-1 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400" /></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Full Name</label><input value={editForm.fullName} onChange={(e) => setEditForm(prev => ({ ...prev, fullName: e.target.value }))} className="w-full bg-white px-5 py-4 rounded-2xl font-bold text-slate-900 border border-slate-200 shadow-sm mt-1 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400" /></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Date of Birth</label><input type="date" value={editForm.dob} onChange={(e) => setEditForm(prev => ({ ...prev, dob: e.target.value }))} className="w-full bg-white px-5 py-4 rounded-2xl font-bold text-slate-900 border border-slate-200 shadow-sm mt-1 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400" /></div>
+              </div>
+              <div className="pt-4 sticky bottom-0 bg-white border-t border-slate-50">
+                <button type="submit" className="w-full py-5 bg-orange-600 text-white font-black rounded-[24px] shadow-xl shadow-orange-600/20 uppercase text-xs tracking-widest active:scale-95 transition-all">Save All Changes</button>
+              </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Business Claim Modal */}
+      {/* Business Modal (Claim or Add) */}
       {showBusinessModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-sm rounded-[40px] p-8 shadow-2xl relative">
-            <button onClick={() => setShowBusinessModal(false)} className="absolute top-8 right-8 p-2 rounded-full bg-slate-50 text-slate-400 hover:bg-slate-100 active:scale-90 transition-all"><X size={18} /></button>
-            <h3 className="text-2xl font-black mb-2 text-slate-800">Claim Spot</h3>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">{selectedRes?.name}</p>
-            <form onSubmit={submitBusinessClaim} className="space-y-6">
-              <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Business Email</label><input required type="email" placeholder="manager@restaurant.com" className="w-full bg-white px-5 py-4 rounded-2xl font-black text-slate-900 border border-slate-200 shadow-sm mt-1 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400" /></div>
-              <button type="submit" className="w-full py-4 bg-slate-900 text-white font-black rounded-2xl shadow-xl uppercase text-xs tracking-widest active:scale-95 transition-all hover:bg-slate-800">Submit Request</button>
-            </form>
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md sm:rounded-[40px] rounded-t-[40px] p-8 pt-10 shadow-2xl relative max-h-[90vh] flex flex-col">
+            <button onClick={() => setShowBusinessModal(false)} className="absolute top-8 right-8 p-2 rounded-full bg-slate-50 text-slate-400 hover:bg-slate-100 active:scale-90 transition-all z-10"><X size={18} /></button>
+            <div className="mb-6 flex-shrink-0">
+              <h3 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2"><Store size={24} className="text-orange-500"/> Business Portal</h3>
+            </div>
+            
+            <div className="flex gap-2 mb-6 p-1 bg-slate-100 rounded-xl flex-shrink-0">
+              <button onClick={() => setOwnerTab('claim')} className={`flex-1 py-2 text-xs font-black uppercase tracking-widest rounded-lg transition-all ${ownerTab === 'claim' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Claim Existing</button>
+              <button onClick={() => setOwnerTab('new')} className={`flex-1 py-2 text-xs font-black uppercase tracking-widest rounded-lg transition-all ${ownerTab === 'new' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Add New</button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto no-scrollbar pb-4">
+              {ownerTab === 'claim' ? (
+                <form onSubmit={submitBusinessFlow} className="space-y-5">
+                  {selectedRes ? (
+                    <div className="p-4 bg-orange-50 border border-orange-100 rounded-2xl mb-4">
+                      <p className="text-[10px] font-black uppercase text-orange-400 tracking-widest mb-1">Selected Location</p>
+                      <p className="font-black text-orange-900">{selectedRes.name}</p>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-slate-50 border border-dashed border-slate-300 rounded-2xl mb-4 text-center">
+                      <p className="text-xs font-bold text-slate-500">Please select a restaurant from the map first to claim it.</p>
+                    </div>
+                  )}
+                  <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Business Email</label><input required type="email" placeholder="manager@restaurant.com" className="w-full bg-white px-5 py-4 rounded-2xl font-black text-slate-900 border border-slate-200 shadow-sm mt-1 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400" /></div>
+                  <button disabled={!selectedRes} type="submit" className={`w-full py-4 text-white font-black rounded-2xl shadow-xl uppercase text-xs tracking-widest transition-all ${selectedRes ? 'bg-slate-900 hover:bg-slate-800 active:scale-95' : 'bg-slate-300'}`}>Submit Claim Request</button>
+                </form>
+              ) : (
+                <form onSubmit={submitBusinessFlow} className="space-y-5">
+                  <div className="flex items-start gap-2 bg-blue-50 border border-blue-100 p-3 rounded-xl mb-2">
+                    <Info size={16} className="text-blue-500 shrink-0 mt-0.5"/>
+                    <p className="text-[10px] font-bold text-blue-700 leading-snug">Owners: Get more foot traffic by adding your spot. Pin your exact location below.</p>
+                  </div>
+
+                  <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Restaurant Name</label><input required value={newResForm.name} onChange={e => setNewResForm({...newResForm, name: e.target.value})} className="w-full bg-white px-5 py-3.5 rounded-2xl font-black text-slate-900 border border-slate-200 shadow-sm mt-1 outline-none focus:ring-2 focus:ring-orange-500/20" placeholder="e.g. My Cafe" /></div>
+                  <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Address</label><input required value={newResForm.address} onChange={e => setNewResForm({...newResForm, address: e.target.value})} className="w-full bg-white px-5 py-3.5 rounded-2xl font-medium text-slate-900 border border-slate-200 shadow-sm mt-1 outline-none focus:ring-2 focus:ring-orange-500/20" placeholder="Street, City" /></div>
+                  
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest flex justify-between items-center mb-1">
+                      Set Location <span className="text-[9px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded font-bold">Interactive</span>
+                    </label>
+                    <div className="h-40 w-full rounded-2xl overflow-hidden border border-slate-200 relative bg-slate-100 z-0">
+                      {leafletReady && (
+                        <LeafletMap 
+                          center={{lat: newResForm.lat, lng: newResForm.lng}} 
+                          markers={[{lat: newResForm.lat, lng: newResForm.lng, img: '📍', type: 'business'}]}
+                          onMapClick={(latlng) => setNewResForm(prev => ({...prev, lat: latlng.lat, lng: latlng.lng}))}
+                        />
+                      )}
+                      <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[400] bg-slate-900/80 text-white px-3 py-1 rounded-full text-[10px] font-bold shadow-sm backdrop-blur-sm pointer-events-none whitespace-nowrap">Tap map to move pin</div>
+                    </div>
+                  </div>
+
+                  <div className={`p-4 rounded-2xl border-2 transition-all ${promoteListing ? 'bg-amber-50 border-amber-400' : 'bg-white border-slate-200'}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Star size={16} className={promoteListing ? 'text-amber-500 fill-amber-500' : 'text-slate-400'}/>
+                        <h4 className="font-black text-sm text-slate-800">Promoted Listing</h4>
+                      </div>
+                      <div className="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" className="sr-only peer" checked={promoteListing} onChange={() => setPromoteListing(!promoteListing)} />
+                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                      </div>
+                    </div>
+                    <p className="text-[10px] font-bold text-slate-500 leading-snug">Stand out on the Near Me map with a glowing gold pin and "AD" badge. ₱500/month.</p>
+                  </div>
+
+                  <button disabled={processingPayment} type="submit" className="w-full py-4 bg-orange-600 text-white font-black rounded-2xl shadow-xl uppercase text-xs tracking-widest mt-4 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-70">
+                    {processingPayment ? 'Processing...' : promoteListing ? 'Pay ₱500 & Publish' : 'List Restaurant Free'}
+                  </button>
+                </form>
+              )}
+            </div>
           </div>
         </div>
       )}
