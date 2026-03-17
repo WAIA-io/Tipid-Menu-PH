@@ -12,32 +12,21 @@ import {
 
 // --- Firebase Integration ---
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, FacebookAuthProvider, signInWithPopup } from 'firebase/auth';
+import { getAuth, signInAnonymously, onAuthStateChanged, FacebookAuthProvider, signInWithPopup } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 
-// Initialize Firebase OUTSIDE the component to prevent re-initialization
+// Initialize Firebase with your exact credentials
+const firebaseConfig = {
+  apiKey: "AIzaSyD_94cFdfFoIy6YgdMhKYuS9M2vjRJN8LU",
+  authDomain: "tipid-menu-ph.firebaseapp.com",
+  projectId: "tipid-menu-ph",
+  storageBucket: "tipid-menu-ph.firebasestorage.app",
+  messagingSenderId: "617709691995",
+  appId: "1:617709691995:web:42813eb870c1d98135cb7e"
+};
+
 let app, auth, db, fbProvider;
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'tipid-menu-ph';
-
 try {
-  // Try to use the environment config first (for preview compatibility)
-  // If not running in preview, fallback to your actual Firebase config
-  let firebaseConfig;
-  
-  if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-    firebaseConfig = typeof __firebase_config === 'string' ? JSON.parse(__firebase_config) : __firebase_config;
-  } else {
-    // YOUR ACTUAL CONFIGURATION FROM SCREENSHOT
-    firebaseConfig = {
-      apiKey: "AIzaSyD_94cFdfFoIy6YgdMhKYuS9M2vjRJN8LU",
-      authDomain: "tipid-menu-ph.firebaseapp.com",
-      projectId: "tipid-menu-ph",
-      storageBucket: "tipid-menu-ph.firebasestorage.app",
-      messagingSenderId: "617709691995",
-      appId: "1:617709691995:web:42813eb870c1d98135cb7e"
-    };
-  }
-
   app = initializeApp(firebaseConfig);
   auth = getAuth(app);
   db = getFirestore(app);
@@ -46,15 +35,21 @@ try {
   console.error("Firebase init error:", e);
 }
 
+// Use a string constant for the app ID in the database paths
+const APP_ID_DB_KEY = 'tipid-menu-ph';
+
 // --- Default Location & Mock Data Fallbacks ---
 const DEFAULT_LOC = { lat: 14.6116, lng: 120.9780 };
 
 const MOCK_RESTAURANTS = [
-  { id: '1', name: 'Jollibee SM San Lazaro', category: 'Fast Food', rating: 4.8, address: 'Tayuman St', lat: 14.6125, lng: 120.9790, img: '🐝', verified: true },
-  { id: '2', name: "McDonald's Tayuman", category: 'Fast Food', rating: 4.5, address: 'Tayuman cor Rizal Ave', lat: 14.6110, lng: 120.9770, img: '🍔', verified: true },
-  { id: '3', name: 'Mang Inasal', category: 'Fast Food', rating: 4.7, address: 'SM City San Lazaro', lat: 14.6130, lng: 120.9760, img: '🍗', verified: true },
-  { id: '4', name: 'Greenwich', category: 'Pizza', rating: 4.3, address: 'Tayuman Center', lat: 14.6105, lng: 120.9795, img: '🍕', verified: true },
-  { id: '5', name: 'Starbucks', category: 'Coffee', rating: 4.6, address: 'SM San Lazaro', lat: 14.6140, lng: 120.9800, img: '☕', verified: false }
+  { id: '1', name: 'Jollibee SM San Lazaro', category: 'Fast Food', rating: 4.8, address: 'Tayuman St', lat: 14.6125, lng: 120.9790, img: '🐝', verified: true, desc: 'The classic Filipino fast-food chain serving world-famous Chickenjoy, sweet style spaghetti, and Peach Mango Pie.' },
+  { id: '2', name: "McDonald's Tayuman", category: 'Fast Food', rating: 4.5, address: 'Tayuman cor Rizal Ave', lat: 14.6110, lng: 120.9770, img: '🍔', verified: true, desc: 'Famous for its world-class fries, Big Mac, and affordable localized menu items like McSpaghetti.' },
+  { id: '3', name: 'Mang Inasal', category: 'Fast Food', rating: 4.7, address: 'SM City San Lazaro', lat: 14.6130, lng: 120.9760, img: '🍗', verified: true, desc: 'Your go-to spot for unlimited rice, authentic grilled chicken inasal, and creamy halo-halo.' },
+  { id: '4', name: 'Greenwich', category: 'Pizza', rating: 4.3, address: 'Tayuman Center', lat: 14.6105, lng: 120.9795, img: '🍕', verified: true, desc: 'Serving Filipino-style pizza and pasta favorites perfect for sharing with the barkada.' },
+  { id: '5', name: 'Starbucks', category: 'Coffee', rating: 4.6, address: 'SM San Lazaro', lat: 14.6140, lng: 120.9800, img: '☕', verified: false, desc: 'Premium coffee, cozy ambiance, and a great place for casual meetings or studying.' },
+  { id: '6', name: 'Chowking', category: 'Fast Food', rating: 4.4, address: 'LRT Tayuman Station', lat: 14.6160, lng: 120.9810, img: '🥡', verified: true, desc: 'Chinese fast food favorites blending traditional flavors with local tastes like Chao Fan and Siomai.' },
+  { id: '7', name: 'KFC', category: 'Fast Food', rating: 4.5, address: 'SM City San Lazaro', lat: 14.6135, lng: 120.9765, img: '🍗', verified: true, desc: 'Finger lickin\' good fried chicken with their signature secret recipe of 11 herbs and spices.' },
+  { id: '8', name: 'Burger King', category: 'Fast Food', rating: 4.6, address: 'Espana Blvd', lat: 14.6080, lng: 120.9820, img: '🍔', verified: true, desc: 'Home of the Whopper, flame-grilled beef patties, and thick-cut onion rings.' }
 ];
 
 const MOCK_PROMOS = [
@@ -116,10 +111,12 @@ const LeafletMap = ({ center, markers = [], onMarkerClick, onMapClick, userLocat
     markers.forEach(m => {
       const isUser = m.type === 'user';
       const isPromoted = m.isPromoted;
-      const borderColor = isUser ? 'border-blue-500' : isPromoted ? 'border-amber-400' : 'border-orange-500';
-      const bgColor = isPromoted ? 'bg-gradient-to-br from-amber-200 to-yellow-400' : 'bg-white';
+      const isLocked = m.isLocked; 
+      
+      const borderColor = isLocked ? 'border-slate-300' : isUser ? 'border-blue-500' : isPromoted ? 'border-amber-400' : 'border-orange-500';
+      const bgColor = isLocked ? 'bg-slate-200 opacity-90' : isPromoted ? 'bg-gradient-to-br from-amber-200 to-yellow-400' : 'bg-white';
       const glow = isPromoted ? 'shadow-[0_0_15px_rgba(251,191,36,0.8)]' : 'shadow-lg';
-      const badgeHtml = isPromoted ? '<div class="absolute -top-1 -right-1 bg-amber-500 text-white text-[8px] px-1 rounded font-black border border-white">AD</div>' : '';
+      const badgeHtml = isPromoted && !isLocked ? '<div class="absolute -top-1 -right-1 bg-amber-500 text-white text-[8px] px-1 rounded font-black border border-white">AD</div>' : '';
       const iconHtml = `<div class="w-10 h-10 ${bgColor} rounded-full flex items-center justify-center ${glow} border-2 ${borderColor} text-xl relative">${m.img || '📍'}${badgeHtml}</div>`;
       
       const icon = window.L.divIcon({ className: 'bg-transparent', html: iconHtml, iconSize: [40, 40], iconAnchor: [20, 40] });
@@ -159,7 +156,7 @@ const LeafletMap = ({ center, markers = [], onMarkerClick, onMapClick, userLocat
 
 export default function App() {
   const [appState, setAppState] = useState('login'); 
-  const [authMethod, setAuthMethod] = useState('email'); // 'email' | 'mobile'
+  const [authMethod, setAuthMethod] = useState('email'); 
   const [authForm, setAuthForm] = useState({ email: '', password: '', mobile: '' });
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
@@ -200,7 +197,6 @@ export default function App() {
   const [activeView, setActiveView] = useState('main'); 
   const [selectedRes, setSelectedRes] = useState(null);
   
-  // Modals & Inputs
   const [showVerifyModal, setShowVerifyModal] = useState(false);
   const [showAddHackModal, setShowAddHackModal] = useState(false);
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
@@ -232,11 +228,7 @@ export default function App() {
     
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
+        await signInAnonymously(auth);
       } catch (err) {
         console.error("Auth init failed:", err);
       }
@@ -255,7 +247,7 @@ export default function App() {
     if (!firebaseUser || !db) return;
     
     // Connect to the Live Hacks Database
-    const hacksRef = collection(db, 'artifacts', appId, 'public', 'data', 'hacks');
+    const hacksRef = collection(db, 'artifacts', APP_ID_DB_KEY, 'public', 'data', 'hacks');
     
     const unsubscribeHacks = onSnapshot(hacksRef, (snapshot) => {
       if (snapshot.empty) {
@@ -417,7 +409,7 @@ export default function App() {
   };
   
   const handleOtpChange = (e) => { 
-    setOtpInput(e.target.value.replace(new RegExp('[^0-9]', 'g'), '')); 
+    setOtpInput(e.target.value.replace(/[^0-9]/g, '')); 
   };
 
   const handleVerifyOTP = (e) => {
@@ -516,7 +508,7 @@ export default function App() {
     // Firebase Write
     if (firebaseUser && db) {
       try {
-        const hackRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'hacks'), newHackId);
+        const hackRef = doc(collection(db, 'artifacts', APP_ID_DB_KEY, 'public', 'data', 'hacks'), newHackId);
         await setDoc(hackRef, newHack);
       } catch (err) {
         console.error("Error writing to Firebase:", err);
@@ -610,7 +602,7 @@ export default function App() {
   const adminTogglePin = async (id) => { 
     const hack = hacks.find(h => h.id === id);
     if (hack && firebaseUser && db) {
-      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'hacks', id), { isPinned: !hack.isPinned });
+      await updateDoc(doc(db, 'artifacts', APP_ID_DB_KEY, 'public', 'data', 'hacks', id), { isPinned: !hack.isPinned });
     } else {
       setHacks(prev => prev.map(h => h.id === id ? { ...h, isPinned: !h.isPinned } : h)); 
     }
@@ -651,7 +643,7 @@ export default function App() {
   };
   const adminApproveHack = async (id) => { 
     if (firebaseUser && db) {
-      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'hacks', id), { status: 'approved' });
+      await updateDoc(doc(db, 'artifacts', APP_ID_DB_KEY, 'public', 'data', 'hacks', id), { status: 'approved' });
     } else {
       setHacks(prev => prev.map(h => h.id === id ? { ...h, status: 'approved' } : h)); 
     }
@@ -659,7 +651,7 @@ export default function App() {
   };
   const adminRejectHack = async (id) => { 
     if (firebaseUser && db) {
-      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'hacks', id));
+      await deleteDoc(doc(db, 'artifacts', APP_ID_DB_KEY, 'public', 'data', 'hacks', id));
     } else {
       setHacks(prev => prev.filter(h => h.id !== id)); 
     }
@@ -725,7 +717,8 @@ export default function App() {
       rating: 0, 
       img: newResForm.img, 
       verified: true, 
-      isPromoted: promoteListing 
+      isPromoted: promoteListing,
+      desc: 'A new spot submitted by a business owner.'
     };
     setRestaurants(prev => [newRes, ...prev]);
     setActiveBusinesses(prev => [{ id: newRes.id, restaurant: newRes.name, email: userData.email, views: 0, promosActive: 0 }, ...prev]);
@@ -792,7 +785,6 @@ export default function App() {
             
             <div className="flex items-center gap-4 my-1"><div className="h-px bg-slate-100 flex-1"></div><span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">OR</span><div className="h-px bg-slate-100 flex-1"></div></div>
             
-            {/* Facebook Auth Button */}
             <button onClick={handleFacebookAuth} disabled={authLoading} type="button" className="relative z-20 w-full py-3.5 bg-[#1877F2] hover:bg-[#166FE5] text-white font-black rounded-2xl flex justify-center items-center gap-2 uppercase text-xs tracking-widest active:scale-95 transition-all shadow-md">
               <Facebook size={18} className="fill-white" /> Continue with Facebook
             </button>
@@ -813,7 +805,6 @@ export default function App() {
     const pendingHacksCount = hacks.filter(h => h.status === 'pending').length;
     const pendingReportsCount = reportsList.filter(r => r.status === 'pending').length;
     const pendingBusinessCount = businessRequests.filter(b => b.status === 'pending').length;
-
     const activeUsersCount = usersList.filter(u => u.status === 'active').length;
     const inactiveUsersCount = usersList.filter(u => u.status === 'inactive').length;
 
@@ -1306,6 +1297,7 @@ export default function App() {
         {/* Upgrade Banner */}
         {!userData.isPro && lockedCount > 0 && (
           <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 text-center shadow-xl border border-slate-700 relative overflow-hidden">
+            <Crown size={60} className="absolute -top-4 -right-4 text-white/5" />
             <h4 className="text-lg font-black text-white mb-2">Want to see {lockedCount} more spots?</h4>
             <p className="text-xs text-slate-300 font-medium mb-4">You've hit the limit for the free version. Upgrade to PRO for unrestricted access to all secret locations.</p>
             <button onClick={() => setCurrentTab('pro')} className="bg-orange-500 hover:bg-orange-600 text-white w-full py-3.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-[0_0_20px_rgba(249,115,22,0.3)]">
