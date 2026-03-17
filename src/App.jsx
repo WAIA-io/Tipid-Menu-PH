@@ -417,7 +417,7 @@ export default function App() {
   };
   
   const handleOtpChange = (e) => { 
-    setOtpInput(e.target.value.replace(/[^0-9]/g, '')); 
+    setOtpInput(e.target.value.replace(new RegExp('[^0-9]', 'g'), '')); 
   };
 
   const handleVerifyOTP = (e) => {
@@ -769,7 +769,7 @@ export default function App() {
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Mobile Number</label>
                   <div className="flex gap-2 mt-1">
                     <span className="bg-slate-100 px-4 py-3.5 rounded-2xl font-bold text-slate-500 border border-slate-100 flex items-center">+63</span>
-                    <input required type="tel" value={authForm.mobile} onChange={e => setAuthForm({...authForm, mobile: e.target.value.replace(/\D/g, '')})} maxLength={10} className="flex-1 bg-slate-50 px-5 py-3.5 rounded-2xl font-bold text-slate-900 border border-slate-100 outline-none focus:ring-2 focus:ring-orange-500/20 transition-all" placeholder="912 345 6789" />
+                    <input required type="tel" value={authForm.mobile} onChange={e => setAuthForm({...authForm, mobile: e.target.value.replace(new RegExp('[^0-9]', 'g'), '')})} maxLength={10} className="flex-1 bg-slate-50 px-5 py-3.5 rounded-2xl font-bold text-slate-900 border border-slate-100 outline-none focus:ring-2 focus:ring-orange-500/20 transition-all" placeholder="912 345 6789" />
                   </div>
                 </div>
               )}
@@ -1306,7 +1306,6 @@ export default function App() {
         {/* Upgrade Banner */}
         {!userData.isPro && lockedCount > 0 && (
           <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 text-center shadow-xl border border-slate-700 relative overflow-hidden">
-            <Crown size={60} className="absolute -top-4 -right-4 text-white/5" />
             <h4 className="text-lg font-black text-white mb-2">Want to see {lockedCount} more spots?</h4>
             <p className="text-xs text-slate-300 font-medium mb-4">You've hit the limit for the free version. Upgrade to PRO for unrestricted access to all secret locations.</p>
             <button onClick={() => setCurrentTab('pro')} className="bg-orange-500 hover:bg-orange-600 text-white w-full py-3.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-[0_0_20px_rgba(249,115,22,0.3)]">
@@ -1652,7 +1651,7 @@ export default function App() {
                   <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Email Address {userData.fbVerified && "(Facebook)"}</label><input type="email" required={userData.authProvider === 'email'} readOnly={userData.fbVerified} value={editForm.email} onChange={(e) => setEditForm(prev => ({ ...prev, email: e.target.value }))} className={`w-full px-5 py-4 rounded-2xl font-bold text-slate-900 border border-slate-200 shadow-sm mt-1 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 ${userData.fbVerified ? 'bg-slate-100 cursor-not-allowed text-slate-500' : 'bg-white'}`} placeholder="juan@example.com" /></div>
                 )}
                 {userData.authProvider === 'mobile' && (
-                  <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Mobile Number</label><input type="tel" required value={editForm.mobile} onChange={(e) => setEditForm(prev => ({ ...prev, mobile: e.target.value.replace(/\D/g, '') }))} className="w-full bg-white px-5 py-4 rounded-2xl font-bold text-slate-900 border border-slate-200 shadow-sm mt-1 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400" placeholder="912 345 6789" /></div>
+                  <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Mobile Number</label><input type="tel" required value={editForm.mobile} onChange={(e) => setEditForm(prev => ({ ...prev, mobile: e.target.value.replace(new RegExp('[^0-9]', 'g'), '') }))} className="w-full bg-white px-5 py-4 rounded-2xl font-bold text-slate-900 border border-slate-200 shadow-sm mt-1 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400" placeholder="912 345 6789" /></div>
                 )}
                 {userData.authProvider !== 'facebook' && (
                   <div><label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Password</label><input type="password" value={editForm.password} onChange={(e) => setEditForm(prev => ({ ...prev, password: e.target.value }))} className="w-full bg-white px-5 py-4 rounded-2xl font-bold text-slate-900 border border-slate-200 shadow-sm mt-1 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 placeholder:text-slate-300" placeholder="Leave blank to keep current" /></div>
