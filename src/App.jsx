@@ -7,7 +7,7 @@ import {
   AlertTriangle, BarChart3, Settings, MessageSquare, Pin, Megaphone,
   TrendingUp, EyeOff, AlertOctagon, Bell, Users, Activity,
   FileSpreadsheet, FileCode2, Store, LogOut, Trophy,
-  Smartphone, Instagram, Link as LinkIcon, Compass, Facebook, Mail, Phone
+  Smartphone, Instagram, Link as LinkIcon, Compass, Facebook, Mail, Phone, Crown
 } from 'lucide-react';
 
 // --- Firebase Integration ---
@@ -197,6 +197,7 @@ export default function App() {
   const [activeView, setActiveView] = useState('main'); 
   const [selectedRes, setSelectedRes] = useState(null);
   
+  // Modals & Inputs
   const [showVerifyModal, setShowVerifyModal] = useState(false);
   const [showAddHackModal, setShowAddHackModal] = useState(false);
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
@@ -785,6 +786,7 @@ export default function App() {
             
             <div className="flex items-center gap-4 my-1"><div className="h-px bg-slate-100 flex-1"></div><span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">OR</span><div className="h-px bg-slate-100 flex-1"></div></div>
             
+            {/* Facebook Auth Button */}
             <button onClick={handleFacebookAuth} disabled={authLoading} type="button" className="relative z-20 w-full py-3.5 bg-[#1877F2] hover:bg-[#166FE5] text-white font-black rounded-2xl flex justify-center items-center gap-2 uppercase text-xs tracking-widest active:scale-95 transition-all shadow-md">
               <Facebook size={18} className="fill-white" /> Continue with Facebook
             </button>
@@ -1193,7 +1195,7 @@ export default function App() {
 
   const renderTabBar = () => (
     <nav className="bg-white/80 backdrop-blur-xl border-t border-slate-100 px-6 py-3 flex justify-between items-center sticky bottom-0 z-30 pb-safe">
-      <button onClick={() => setCurrentTab('map')} className={`flex flex-col items-center gap-1.5 transition-colors ${currentTab === 'map' ? 'text-orange-600' : 'text-slate-300'}`}><MapIcon size={22} /><span className="text-[10px] font-black uppercase tracking-widest">Near</span></button>
+      <button onClick={() => setCurrentTab('map')} className={`flex flex-col items-center gap-1.5 transition-colors ${currentTab === 'map' ? 'text-orange-600' : 'text-slate-300'}`}><MapPin size={22} /><span className="text-[10px] font-black uppercase tracking-widest">Near</span></button>
       <button onClick={() => setCurrentTab('spots')} className={`flex flex-col items-center gap-1.5 transition-colors ${currentTab === 'spots' ? 'text-orange-600' : 'text-slate-300'}`}><List size={22} /><span className="text-[10px] font-black uppercase tracking-widest">Spots</span></button>
       <button onClick={() => { if(selectedRes) { setShowAddHackModal(true); } else { setCurrentTab('spots'); } }} className="bg-gradient-to-br from-orange-500 to-amber-500 p-4 rounded-full text-white shadow-xl shadow-orange-500/30 transform -translate-y-6 hover:scale-110 active:scale-95 transition-all"><Plus size={24}/></button>
       <button onClick={() => setCurrentTab('pro')} className={`flex flex-col items-center gap-1.5 transition-colors ${currentTab === 'pro' ? 'text-orange-600' : 'text-slate-300'}`}><Zap size={22} className={currentTab === 'pro' ? 'fill-orange-50' : ''}/><span className="text-[10px] font-black uppercase tracking-widest">PRO</span></button>
@@ -1583,7 +1585,7 @@ export default function App() {
                 <div className="mb-6 flex-shrink-0">
                   <h3 className="text-2xl font-black mb-1 flex items-center gap-2 tracking-tight text-slate-800"><Plus size={24} className="text-orange-500"/> Share Hack</h3>
                   {selectedRes ? (
-                    <p className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><MapIcon size={12} className="text-orange-400"/> {selectedRes.name}</p>
+                    <p className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><MapPin size={12} className="text-orange-400"/> {selectedRes.name}</p>
                   ) : (
                     <div className="mt-3 relative z-10">
                       <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-100 rounded-xl mb-3">
