@@ -91,12 +91,18 @@ export default function App() {
   const [showAddHackModal, setShowAddHackModal] = useState(false);
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [showBusinessModal, setShowBusinessModal] = useState(false);
+  const [showAdminAuthModal, setShowAdminAuthModal] = useState(false);
   
   const [otpInput, setOtpInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [editForm, setEditForm] = useState({ username: '', avatar: '' });
+  const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [broadcastInput, setBroadcastInput] = useState('');
   const [toast, setToast] = useState('');
+
+  // Refs for Secret Admin Access
+  const logoTapCount = useRef(0);
+  const logoTapTimeout = useRef(null);
 
   const userTier = useMemo(() => TIERS.find(t => (userData.points || 0) >= t.minPoints) || TIERS[TIERS.length - 1], [userData.points]);
 
@@ -106,7 +112,6 @@ export default function App() {
     setTimeout(() => setToast(''), 3000); 
   };
 
-  // --- Data Export Features (Admin) ---
   const exportCSV = () => {
     const headers = ['ID', 'Name', 'Email', 'Status', 'Verified', 'Posts', 'Last Login'];
     const rows = usersList.map(u => [
@@ -152,7 +157,33 @@ export default function App() {
     showToastMessage("XML data structure exported successfully!");
   };
 
-  // --- Core Handlers ---
+  const handleLogoTap = () => {
+    logoTapCount.current += 1;
+    if (logoTapTimeout.current) clearTimeout(logoTapTimeout.current);
+
+    if (logoTapCount.current >= 5) {
+      logoTapCount.current = 0;
+      setShowAdminAuthModal(true);
+    } else {
+      logoTapTimeout.current = setTimeout(() => {
+        logoTapCount.current = 0;
+      }, 1000);
+    }
+  };
+
+  const handleAdminLogin = (e) => {
+    e.preventDefault();
+    if (adminPasswordInput === 'foodhacks101') {
+      setShowAdminAuthModal(false);
+      setAdminPasswordInput('');
+      setActiveView('admin');
+      showToastMessage("Super Admin Access Granted.");
+    } else {
+      setAdminPasswordInput('');
+      showToastMessage("Incorrect admin password.");
+    }
+  };
+
   const handleGuestLogin = () => {
     setAppState('main');
     showToastMessage("Welcome, Guest!");
@@ -170,7 +201,7 @@ export default function App() {
   };
   
   const handleOtpChange = (e) => {
-    setOtpInput(e.target.value.replace(/\D/g, ''));
+    setOtpInput(e.target.value.replace(/[^0-9]/g, ''));
   };
 
   const handleVerifyOTP = (e) => {
@@ -180,7 +211,9 @@ export default function App() {
       setShowVerifyModal(false);
       setOtpInput('');
       showToastMessage("Verified! +100 Points");
-    } else showToastMessage("Invalid OTP. Hint: Use 1234");
+    } else {
+      showToastMessage("Invalid OTP. Hint: Use 1234");
+    }
   };
 
   const handleUpdateProfile = (e) => {
@@ -194,7 +227,8 @@ export default function App() {
     e.preventDefault();
     if (!userData.isVerified && appSettings.requireOTP) {
       setShowAddHackModal(false);
-      return setShowVerifyModal(true);
+      setShowVerifyModal(true);
+      return;
     }
     
     const formData = new FormData(e.target);
@@ -219,7 +253,6 @@ export default function App() {
     showToastMessage(appSettings.autoApproveHacks ? "Hack published! +50 Points" : "Hack submitted for review! +50 Points");
   };
 
-  // --- Advanced Admin Handlers ---
   const adminTogglePin = (id) => {
     setHacks(prev => prev.map(h => h.id === id ? { ...h, isPinned: !h.isPinned } : h));
     showToastMessage("Pin status updated.");
@@ -242,8 +275,11 @@ export default function App() {
 
   const adminResolveReport = (id, action) => {
     setReportsList(prev => prev.map(r => r.id === id ? { ...r, status: 'resolved' } : r));
-    if (action === 'delete') showToastMessage("Content deleted and report resolved.");
-    else showToastMessage("Report dismissed.");
+    if (action === 'delete') {
+      showToastMessage("Content deleted and report resolved.");
+    } else {
+      showToastMessage("Report dismissed.");
+    }
   };
 
   const sendBroadcast = (e) => {
@@ -259,7 +295,11 @@ export default function App() {
   };
 
   const openNav = (type, lat, lng) => {
-    const urls = { google: `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, apple: `http://maps.apple.com/?daddr=${lat},${lng}`, waze: `https://waze.com/ul?ll=${lat},${lng}&navigate=yes` };
+    const urls = { 
+      google: `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, 
+      apple: `http://maps.apple.com/?daddr=${lat},${lng}`, 
+      waze: `https://waze.com/ul?ll=${lat},${lng}&navigate=yes` 
+    };
     window.open(urls[type]);
   };
 
@@ -382,24 +422,33 @@ export default function App() {
               </button>
             </div>
             
-            <div className="flex items-center gap-4 my-2"><div className="h-px bg-slate-100 flex-1"></div><span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">OR</span><div className="h-px bg-slate-100 flex-1"></div></div>
-            <button type="button" onClick={handleGuestLogin} className="w-full py-4 bg-slate-50 text-slate-600 font-black rounded-2xl border border-slate-200 uppercase text-xs tracking-widest hover:bg-slate-100 active:scale-95 transition-all">Continue as Guest</button>
+            <div className="flex items-center gap-4 my-2">
+              <div className="h-px bg-slate-100 flex-1"></div>
+              <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">OR</span>
+              <div className="h-px bg-slate-100 flex-1"></div>
+            </div>
+            
+            <button type="button" onClick={handleGuestLogin} className="w-full py-4 bg-slate-50 text-slate-600 font-black rounded-2xl border border-slate-200 uppercase text-xs tracking-widest hover:bg-slate-100 active:scale-95 transition-all">
+              Continue as Guest
+            </button>
           </form>
         </div>
       </div>
     );
   }
 
-  // --- Admin Views ---
   const renderAdmin = () => {
     const filteredUsers = usersList.filter(u => u.username.toLowerCase().includes(adminSearch.toLowerCase()) || u.email.toLowerCase().includes(adminSearch.toLowerCase()));
     const filteredHacks = hacks.filter(h => h.title.toLowerCase().includes(adminSearch.toLowerCase()) || h.user.toLowerCase().includes(adminSearch.toLowerCase()));
 
+    const pendingHacksCount = hacks.filter(h => h.status === 'pending').length;
+    const pendingReportsCount = reportsList.filter(r => r.status === 'pending').length;
+
     const adminNavTabs = [
       { id: 'overview', icon: Activity, label: 'Overview' },
-      { id: 'hacks', icon: Utensils, label: 'Hacks (' + hacks.filter(h => h.status === 'pending').length + ')' },
+      { id: 'hacks', icon: Utensils, label: `Hacks (${pendingHacksCount})` },
       { id: 'users', icon: Users, label: 'Users' },
-      { id: 'reports', icon: AlertTriangle, label: 'Reports (' + reportsList.filter(r => r.status === 'pending').length + ')' },
+      { id: 'reports', icon: AlertTriangle, label: `Reports (${pendingReportsCount})` },
       { id: 'messages', icon: MessageSquare, label: 'Messages' },
       { id: 'analytics', icon: BarChart3, label: 'Analytics' },
       { id: 'settings', icon: Settings, label: 'Settings' }
@@ -407,7 +456,6 @@ export default function App() {
 
     return (
       <div className="flex-1 flex flex-col overflow-hidden bg-slate-50 animate-in slide-in-from-bottom duration-300 z-50 fixed inset-0 max-w-md mx-auto">
-        {/* Admin Header & Nav */}
         <div className="bg-slate-900 pt-10 pb-4 shadow-xl z-20 flex-shrink-0">
           <div className="flex justify-between items-center text-white px-5 mb-6">
             <h2 className="text-xl font-black flex items-center gap-2"><Shield size={24} className="text-orange-500"/> Command Center</h2>
@@ -425,16 +473,14 @@ export default function App() {
           </div>
         </div>
 
-        {/* Admin Content Area */}
         <div className="flex-1 overflow-y-auto p-5 space-y-6 bg-slate-100">
-          
           {adminTab === 'overview' && (
             <div className="space-y-4 animate-in fade-in">
               <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-2">System Status</h3>
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200"><div className="text-slate-400 mb-1"><Users size={20}/></div><div className="text-2xl font-black text-slate-800">4,289</div><div className="text-[10px] font-bold text-slate-500 uppercase">Total Users</div></div>
                 <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200"><div className="text-orange-500 mb-1"><Utensils size={20}/></div><div className="text-2xl font-black text-slate-800">842</div><div className="text-[10px] font-bold text-slate-500 uppercase">Active Hacks</div></div>
-                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200"><div className="text-red-500 mb-1"><AlertTriangle size={20}/></div><div className="text-2xl font-black text-slate-800">{reportsList.filter(r=>r.status==='pending').length}</div><div className="text-[10px] font-bold text-slate-500 uppercase">Pending Reports</div></div>
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200"><div className="text-red-500 mb-1"><AlertTriangle size={20}/></div><div className="text-2xl font-black text-slate-800">{pendingReportsCount}</div><div className="text-[10px] font-bold text-slate-500 uppercase">Pending Reports</div></div>
                 <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200"><div className="text-green-500 mb-1 font-black text-lg">₱</div><div className="text-2xl font-black text-slate-800">1.2M</div><div className="text-[10px] font-bold text-slate-500 uppercase">Saved by Comm.</div></div>
               </div>
             </div>
@@ -525,7 +571,6 @@ export default function App() {
 
           {adminTab === 'messages' && (
             <div className="space-y-6 animate-in fade-in">
-              {/* Broadcast Form */}
               <div className="bg-gradient-to-br from-indigo-500 to-blue-600 p-5 rounded-2xl shadow-lg text-white">
                 <h4 className="font-black flex items-center gap-2 mb-3"><Megaphone size={18}/> Broadcast Announcement</h4>
                 <form onSubmit={sendBroadcast}>
@@ -534,7 +579,6 @@ export default function App() {
                 </form>
               </div>
 
-              {/* Inbox */}
               <div>
                 <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-3">Inbox</h3>
                 <div className="space-y-3">
@@ -591,7 +635,6 @@ export default function App() {
             <div className="space-y-4 animate-in fade-in">
               <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-2">App Configuration</h3>
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                
                 <div className="p-4 border-b border-slate-100 flex justify-between items-center">
                   <div>
                     <h4 className="font-bold text-slate-800">Auto-Approve Hacks</h4>
@@ -601,7 +644,6 @@ export default function App() {
                     <div className={`w-4 h-4 bg-white rounded-full transition-transform duration-200 ${appSettings.autoApproveHacks ? 'translate-x-6' : 'translate-x-0'}`}></div>
                   </button>
                 </div>
-
                 <div className="p-4 border-b border-slate-100 flex justify-between items-center">
                   <div>
                     <h4 className="font-bold text-slate-800">Require OTP Verification</h4>
@@ -611,7 +653,6 @@ export default function App() {
                     <div className={`w-4 h-4 bg-white rounded-full transition-transform duration-200 ${appSettings.requireOTP ? 'translate-x-6' : 'translate-x-0'}`}></div>
                   </button>
                 </div>
-
                 <div className="p-4 flex justify-between items-center">
                   <div>
                     <h4 className="font-bold text-red-600">Maintenance Mode</h4>
@@ -621,11 +662,9 @@ export default function App() {
                     <div className={`w-4 h-4 bg-white rounded-full transition-transform duration-200 ${appSettings.maintenanceMode ? 'translate-x-6' : 'translate-x-0'}`}></div>
                   </button>
                 </div>
-
               </div>
             </div>
           )}
-
         </div>
       </div>
     );
@@ -633,11 +672,13 @@ export default function App() {
 
   const renderHeader = () => (
     <header className="bg-white px-5 py-4 shadow-sm z-20 flex justify-between items-center sticky top-0">
-      <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-amber-500 italic uppercase tracking-tighter select-none">
+      <h1 
+        onClick={handleLogoTap} 
+        className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-amber-500 italic uppercase tracking-tighter select-none cursor-pointer"
+      >
         Tipid Menu
       </h1>
       <div className="flex items-center gap-3">
-        {/* Properly Sized & Aligned Admin Command Center Button */}
         {userData.isAdmin && (
           <button 
             onClick={() => setActiveView('admin')} 
@@ -671,7 +712,6 @@ export default function App() {
     const filtered = restaurants.filter(r => r.name.toLowerCase().includes(searchQuery.toLowerCase()));
     return (
       <div className="flex-1 overflow-y-auto bg-slate-50 p-5 pb-24">
-        {/* Global Announcement Banner */}
         {globalAnnouncement && (
           <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4 rounded-2xl shadow-lg mb-6 flex gap-3 items-start animate-in slide-in-from-top">
             <Bell size={20} className="shrink-0 mt-0.5"/>
@@ -775,7 +815,6 @@ export default function App() {
             </div>
           </section>
 
-          {/* Business Owner Claim */}
           <div className="mt-8 pt-6 border-t border-slate-200">
             <button onClick={() => setShowBusinessModal(true)} className="w-full bg-white text-slate-600 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-slate-50 transition-colors border border-slate-200 text-sm shadow-sm">
               <Info size={18} /> Are you the manager? Claim Spot
@@ -801,7 +840,18 @@ export default function App() {
         <div className="bg-gradient-to-br from-orange-500 to-amber-500 rounded-[32px] p-6 text-white mb-6 shadow-xl shadow-orange-500/20"><h4 className="font-black text-xl mb-2">Verify Account</h4><p className="text-white/80 text-sm font-medium mb-4">Complete your verification to post hacks and unlock +100 Bonus Points.</p><button onClick={() => setShowVerifyModal(true)} className="w-full py-3.5 bg-white text-orange-600 font-black rounded-2xl shadow-lg hover:scale-[1.02] active:scale-95 transition-all">Start Verification</button></div>
       )}
       
-      <div className="grid grid-cols-2 gap-4 mb-6"><div className="bg-white p-6 rounded-3xl border border-slate-100 text-center shadow-sm"><Share2 size={24} className="mx-auto mb-2 text-slate-300"/><div className="text-2xl font-black text-slate-800">{userData.hacksCount}</div><div className="text-[10px] font-black uppercase text-slate-400">Hacks Shared</div></div><div className="bg-white p-6 rounded-3xl border border-slate-100 text-center shadow-sm"><div className="text-2xl font-black text-green-500 mb-2">₱</div><div className="text-2xl font-black text-slate-800">{userData.totalSavings}</div><div className="text-[10px] font-black uppercase text-slate-400">Total Savings Shared</div></div></div>
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <div className="bg-white p-6 rounded-3xl border border-slate-100 text-center shadow-sm">
+          <Share2 size={24} className="mx-auto mb-2 text-slate-300"/>
+          <div className="text-2xl font-black text-slate-800">{userData.hacksCount}</div>
+          <div className="text-[10px] font-black uppercase text-slate-400">Hacks Shared</div>
+        </div>
+        <div className="bg-white p-6 rounded-3xl border border-slate-100 text-center shadow-sm">
+          <div className="text-2xl font-black text-green-500 mb-2">₱</div>
+          <div className="text-2xl font-black text-slate-800">{userData.totalSavings}</div>
+          <div className="text-[10px] font-black uppercase text-slate-400">Total Savings Shared</div>
+        </div>
+      </div>
     </div>
   );
 
@@ -831,10 +881,8 @@ export default function App() {
       
       {activeView === 'main' && renderTabBar()}
       
-      {/* Toast */}
       {toast && <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-5 py-2.5 rounded-full shadow-2xl z-[200] border border-slate-700 animate-in fade-in slide-in-from-top-4 flex items-center gap-2"><Info size={16} className="text-orange-400" /><p className="font-bold text-sm whitespace-nowrap">{toast}</p></div>}
 
-      {/* Secret Admin Modal */}
       {showAdminAuthModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-slate-900/90 backdrop-blur-sm animate-in fade-in">
           <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-[40px] p-8 shadow-2xl relative overflow-hidden">
@@ -851,7 +899,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Verification Modal */}
       {showVerifyModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-sm rounded-[40px] p-8 shadow-2xl relative overflow-hidden">
@@ -869,7 +916,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Add Hack Modal */}
       {showAddHackModal && (
         <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-md sm:rounded-[40px] rounded-t-[40px] p-8 pt-10 shadow-2xl relative max-h-[90vh] flex flex-col animate-in slide-in-from-bottom">
@@ -886,7 +932,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Edit Profile Modal */}
       {showEditProfileModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-sm rounded-[40px] p-8 shadow-2xl relative">
@@ -905,7 +950,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Business Claim Modal */}
       {showBusinessModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-sm rounded-[40px] p-8 shadow-2xl relative">
