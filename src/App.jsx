@@ -7,7 +7,7 @@ import {
   AlertTriangle, BarChart3, Settings, MessageSquare, Pin, Megaphone,
   TrendingUp, EyeOff, AlertOctagon, Bell, Users, Activity,
   FileSpreadsheet, FileCode2, Store, LogOut, Trophy,
-  Smartphone, Instagram, Link as LinkIcon, Compass, Facebook, Mail, Phone
+  Smartphone, Instagram, Link as LinkIcon, Compass, Facebook, Mail, Phone, Crown
 } from 'lucide-react';
 
 // --- Default Location: Tayuman, Tondo, Manila ---
@@ -15,11 +15,14 @@ const DEFAULT_LOC = { lat: 14.6116, lng: 120.9780 };
 
 // --- Mock Data ---
 const MOCK_RESTAURANTS = [
-  { id: '1', name: 'Jollibee SM San Lazaro', category: 'Fast Food', rating: 4.8, address: 'Tayuman St', lat: 14.6125, lng: 120.9790, img: '🐝', verified: true },
-  { id: '2', name: "McDonald's Tayuman", category: 'Fast Food', rating: 4.5, address: 'Tayuman cor Rizal Ave', lat: 14.6110, lng: 120.9770, img: '🍔', verified: true },
-  { id: '3', name: 'Mang Inasal', category: 'Fast Food', rating: 4.7, address: 'SM City San Lazaro', lat: 14.6130, lng: 120.9760, img: '🍗', verified: true },
-  { id: '4', name: 'Greenwich', category: 'Pizza', rating: 4.3, address: 'Tayuman Center', lat: 14.6105, lng: 120.9795, img: '🍕', verified: true },
-  { id: '5', name: 'Starbucks', category: 'Coffee', rating: 4.6, address: 'SM San Lazaro', lat: 14.6140, lng: 120.9800, img: '☕', verified: false }
+  { id: '1', name: 'Jollibee SM San Lazaro', category: 'Fast Food', rating: 4.8, address: 'Tayuman St', lat: 14.6125, lng: 120.9790, img: '🐝', verified: true, desc: 'The classic Filipino fast-food chain serving world-famous Chickenjoy, sweet style spaghetti, and Peach Mango Pie.' },
+  { id: '2', name: "McDonald's Tayuman", category: 'Fast Food', rating: 4.5, address: 'Tayuman cor Rizal Ave', lat: 14.6110, lng: 120.9770, img: '🍔', verified: true, desc: 'Famous for its world-class fries, Big Mac, and affordable localized menu items like McSpaghetti.' },
+  { id: '3', name: 'Mang Inasal', category: 'Fast Food', rating: 4.7, address: 'SM City San Lazaro', lat: 14.6130, lng: 120.9760, img: '🍗', verified: true, desc: 'Your go-to spot for unlimited rice, authentic grilled chicken inasal, and creamy halo-halo.' },
+  { id: '4', name: 'Greenwich', category: 'Pizza', rating: 4.3, address: 'Tayuman Center', lat: 14.6105, lng: 120.9795, img: '🍕', verified: true, desc: 'Serving Filipino-style pizza and pasta favorites perfect for sharing with the barkada.' },
+  { id: '5', name: 'Starbucks', category: 'Coffee', rating: 4.6, address: 'SM San Lazaro', lat: 14.6140, lng: 120.9800, img: '☕', verified: false, desc: 'Premium coffee, cozy ambiance, and a great place for casual meetings or studying.' },
+  { id: '6', name: 'Chowking', category: 'Fast Food', rating: 4.4, address: 'LRT Tayuman Station', lat: 14.6160, lng: 120.9810, img: '🥡', verified: true, desc: 'Chinese fast food favorites blending traditional flavors with local tastes like Chao Fan and Siomai.' },
+  { id: '7', name: 'KFC', category: 'Fast Food', rating: 4.5, address: 'SM City San Lazaro', lat: 14.6135, lng: 120.9765, img: '🍗', verified: true, desc: 'Finger lickin\' good fried chicken with their signature secret recipe of 11 herbs and spices.' },
+  { id: '8', name: 'Burger King', category: 'Fast Food', rating: 4.6, address: 'Espana Blvd', lat: 14.6080, lng: 120.9820, img: '🍔', verified: true, desc: 'Home of the Whopper, flame-grilled beef patties, and thick-cut onion rings.' }
 ];
 
 const MOCK_PROMOS = [
@@ -54,44 +57,36 @@ const LeafletMap = ({ center, markers = [], onMarkerClick, onMapClick, userLocat
       }).setView([center.lat, center.lng], mini ? 16 : 15);
       
       window.L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        attribution: mini ? '' : '&copy; <a href="https://carto.com/attributions">CARTO</a>, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', 
-        subdomains: 'abcd', 
-        maxZoom: 20
+        attribution: mini ? '' : '&copy; <a href="https://carto.com/attributions">CARTO</a>', subdomains: 'abcd', maxZoom: 20
       }).addTo(map);
       mapInstance.current = map;
     }
 
     const map = mapInstance.current;
     map.off('click');
-    if (onMapClick) {
-      map.on('click', (e) => onMapClick(e.latlng));
-    }
+    if (onMapClick) map.on('click', (e) => onMapClick(e.latlng));
   }, [mini, onMapClick, center.lat, center.lng]);
 
   useEffect(() => {
     if (!mapInstance.current || !window.L) return;
     const map = mapInstance.current;
     map.setView([center.lat, center.lng]);
-    map.eachLayer((layer) => { 
-      if (layer instanceof window.L.Marker) {
-        layer.remove(); 
-      }
-    });
+    map.eachLayer((layer) => { if (layer instanceof window.L.Marker) layer.remove(); });
 
     markers.forEach(m => {
       const isUser = m.type === 'user';
       const isPromoted = m.isPromoted;
-      const borderColor = isUser ? 'border-blue-500' : isPromoted ? 'border-amber-400' : 'border-orange-500';
-      const bgColor = isPromoted ? 'bg-gradient-to-br from-amber-200 to-yellow-400' : 'bg-white';
+      const isLocked = m.isLocked; // Premium Lock
+      
+      const borderColor = isLocked ? 'border-slate-300' : isUser ? 'border-blue-500' : isPromoted ? 'border-amber-400' : 'border-orange-500';
+      const bgColor = isLocked ? 'bg-slate-200 opacity-90' : isPromoted ? 'bg-gradient-to-br from-amber-200 to-yellow-400' : 'bg-white';
       const glow = isPromoted ? 'shadow-[0_0_15px_rgba(251,191,36,0.8)]' : 'shadow-lg';
-      const badgeHtml = isPromoted ? '<div class="absolute -top-1 -right-1 bg-amber-500 text-white text-[8px] px-1 rounded font-black border border-white">AD</div>' : '';
+      const badgeHtml = isPromoted && !isLocked ? '<div class="absolute -top-1 -right-1 bg-amber-500 text-white text-[8px] px-1 rounded font-black border border-white">AD</div>' : '';
       const iconHtml = `<div class="w-10 h-10 ${bgColor} rounded-full flex items-center justify-center ${glow} border-2 ${borderColor} text-xl relative">${m.img || '📍'}${badgeHtml}</div>`;
       
       const icon = window.L.divIcon({ className: 'bg-transparent', html: iconHtml, iconSize: [40, 40], iconAnchor: [20, 40] });
       const marker = window.L.marker([m.lat, m.lng], { icon }).addTo(map);
-      if (onMarkerClick) {
-        marker.on('click', () => onMarkerClick(m));
-      }
+      if (onMarkerClick) marker.on('click', () => onMarkerClick(m));
     });
 
     if (userLocation) {
@@ -103,10 +98,7 @@ const LeafletMap = ({ center, markers = [], onMarkerClick, onMapClick, userLocat
 
   useEffect(() => {
     return () => {
-      if (mapInstance.current) { 
-        mapInstance.current.remove(); 
-        mapInstance.current = null; 
-      }
+      if (mapInstance.current) { mapInstance.current.remove(); mapInstance.current = null; }
     };
   }, []);
 
@@ -192,19 +184,9 @@ export default function App() {
   const userTier = useMemo(() => TIERS.find(t => (userData.points || 0) >= t.minPoints) || TIERS[TIERS.length - 1], [userData.points]);
 
   useEffect(() => {
-    if (window.L) { 
-      setLeafletReady(true); 
-      return; 
-    }
-    const style = document.createElement('link'); 
-    style.rel = 'stylesheet'; 
-    style.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; 
-    document.head.appendChild(style);
-    const script = document.createElement('script'); 
-    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'; 
-    script.async = true; 
-    script.onload = () => setLeafletReady(true); 
-    document.head.appendChild(script);
+    if (window.L) { setLeafletReady(true); return; }
+    const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(style);
+    const script = document.createElement('script'); script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'; script.async = true; script.onload = () => setLeafletReady(true); document.head.appendChild(script);
   }, []);
 
   const showToastMessage = (msg) => { 
@@ -217,50 +199,33 @@ export default function App() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition((pos) => {
         const newLoc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        setUserLoc(newLoc); 
-        setMapCenter(newLoc); 
-        showToastMessage("Location updated!");
-      }, () => { 
-        showToastMessage("Location access denied. Using default."); 
-        setMapCenter(DEFAULT_LOC); 
-      });
+        setUserLoc(newLoc); setMapCenter(newLoc); showToastMessage("Location updated!");
+      }, () => { showToastMessage("Location access denied. Using default."); setMapCenter(DEFAULT_LOC); });
     }
   };
 
   const handleLogoTap = () => {
     logoTapCount.current += 1;
-    if (logoTapTimeout.current) {
-      clearTimeout(logoTapTimeout.current);
-    }
+    if (logoTapTimeout.current) clearTimeout(logoTapTimeout.current);
     if (logoTapCount.current >= 10) {
-      logoTapCount.current = 0; 
-      setShowAdminAuthModal(true);
+      logoTapCount.current = 0; setShowAdminAuthModal(true);
     } else {
-      logoTapTimeout.current = setTimeout(() => { 
-        logoTapCount.current = 0; 
-      }, 1000);
+      logoTapTimeout.current = setTimeout(() => { logoTapCount.current = 0; }, 1000);
     }
   };
 
   const handleAdminLogin = (e) => {
     e.preventDefault();
     if (adminPasswordInput === 'foodhacks101') {
-      setShowAdminAuthModal(false); 
-      setAdminPasswordInput(''); 
-      setUserData(prev => ({ ...prev, isAdmin: true })); 
-      setActiveView('admin'); 
-      showToastMessage("Super Admin Access Granted.");
+      setShowAdminAuthModal(false); setAdminPasswordInput(''); setUserData(prev => ({ ...prev, isAdmin: true })); setActiveView('admin'); showToastMessage("Super Admin Access Granted.");
     } else {
-      setAdminPasswordInput(''); 
-      showToastMessage("Incorrect admin password.");
+      setAdminPasswordInput(''); showToastMessage("Incorrect admin password.");
     }
   };
 
   const handleAdminLogout = () => {
     if (window.confirm("Are you sure you want to log out of the Admin Panel?")) {
-      setUserData(prev => ({ ...prev, isAdmin: false })); 
-      setActiveView('main'); 
-      showToastMessage("Logged out of Admin Panel.");
+      setUserData(prev => ({ ...prev, isAdmin: false })); setActiveView('main'); showToastMessage("Logged out of Admin Panel.");
     }
   };
 
@@ -308,34 +273,20 @@ export default function App() {
     }, 1200);
   };
   
-  const handleOtpChange = (e) => { 
-    setOtpInput(e.target.value.replace(/[^0-9]/g, '')); 
-  };
+  const handleOtpChange = (e) => { setOtpInput(e.target.value.replace(/[^0-9]/g, '')); };
 
   const handleVerifyOTP = (e) => {
     e.preventDefault();
     if (otpInput === '1234') {
       setUserData(prev => ({ ...prev, isVerified: true, points: prev.points + 100 }));
-      setShowVerifyModal(false); 
-      setOtpInput(''); 
-      showToastMessage("Verified! +100 Points");
-    } else {
-      showToastMessage("Invalid OTP. Hint: Use 1234");
-    }
+      setShowVerifyModal(false); setOtpInput(''); showToastMessage("Verified! +100 Points");
+    } else showToastMessage("Invalid OTP. Hint: Use 1234");
   };
 
   const handleOpenEditProfile = () => {
     setEditForm({
-      username: userData.username || '', 
-      fullName: userData.fullName || '', 
-      email: userData.email || '', 
-      mobile: userData.mobile || '',
-      password: '', 
-      dob: userData.dob || '', 
-      whatsapp: userData.whatsapp || '', 
-      messenger: userData.messenger || '', 
-      instagram: userData.instagram || '', 
-      avatar: userData.avatar || '👤'
+      username: userData.username || '', fullName: userData.fullName || '', email: userData.email || '', mobile: userData.mobile || '',
+      password: '', dob: userData.dob || '', whatsapp: userData.whatsapp || '', messenger: userData.messenger || '', instagram: userData.instagram || '', avatar: userData.avatar || '👤'
     });
     setShowEditProfileModal(true);
   };
@@ -343,64 +294,30 @@ export default function App() {
   const handleUpdateProfile = (e) => {
     e.preventDefault();
     setUserData(prev => ({ 
-      ...prev, 
-      username: editForm.username, 
-      fullName: editForm.fullName, 
-      email: editForm.email, 
-      mobile: editForm.mobile,
-      dob: editForm.dob, 
-      whatsapp: editForm.whatsapp, 
-      messenger: editForm.messenger, 
-      instagram: editForm.instagram, 
-      avatar: editForm.avatar 
+      ...prev, username: editForm.username, fullName: editForm.fullName, email: editForm.email, mobile: editForm.mobile,
+      dob: editForm.dob, whatsapp: editForm.whatsapp, messenger: editForm.messenger, instagram: editForm.instagram, avatar: editForm.avatar 
     }));
     setShowEditProfileModal(false);
     showToastMessage("Profile & Settings updated!");
   };
 
   const saveNewRestaurant = () => {
-    if (!newResForm.name || !newResForm.address) {
-      showToastMessage("Please fill in Name and Address.");
-      return;
-    }
-    const newRes = { 
-      id: Math.random().toString(36).substr(2, 9), 
-      name: newResForm.name, 
-      category: newResForm.category, 
-      address: newResForm.address, 
-      lat: newResForm.lat, 
-      lng: newResForm.lng, 
-      rating: 0, 
-      img: newResForm.img, 
-      verified: false 
-    };
-    setRestaurants(prev => [newRes, ...prev]); 
-    setSelectedRes(newRes); 
-    setIsAddingNewRes(false); 
-    showToastMessage("Restaurant added successfully!");
+    if (!newResForm.name || !newResForm.address) return showToastMessage("Please fill in Name and Address.");
+    const newRes = { id: Math.random().toString(36).substr(2, 9), name: newResForm.name, category: newResForm.category, address: newResForm.address, lat: newResForm.lat, lng: newResForm.lng, rating: 0, img: newResForm.img, verified: false, desc: 'A newly added community spot.' };
+    setRestaurants(prev => [newRes, ...prev]); setSelectedRes(newRes); setIsAddingNewRes(false); showToastMessage("Restaurant added successfully!");
   };
 
   const submitHack = (e) => {
     e.preventDefault();
     if (!userData.isVerified && appSettings.requireOTP) {
-      setShowAddHackModal(false); 
-      setShowVerifyModal(true);
-      return;
+      setShowAddHackModal(false); return setShowVerifyModal(true);
     }
     
     const formData = new FormData(e.target);
     const savings = Number(formData.get('savings'));
     const newHack = {
-      id: Math.random().toString(36).substr(2, 9), 
-      resId: selectedRes.id, 
-      title: formData.get('title'), 
-      desc: formData.get('desc'),
-      savings: savings, 
-      votes: 1, 
-      user: userData.username,
-      avatar: userData.avatar, 
-      status: appSettings.autoApproveHacks ? 'approved' : 'pending',
-      isPinned: false
+      id: Math.random().toString(36).substr(2, 9), resId: selectedRes.id, title: formData.get('title'), desc: formData.get('desc'),
+      savings: savings, votes: 1, user: userData.username, avatar: userData.avatar, status: appSettings.autoApproveHacks ? 'approved' : 'pending', isPinned: false
     };
 
     setHacks(prev => [newHack, ...prev]);
@@ -410,10 +327,7 @@ export default function App() {
   };
 
   const handleUpgradePro = (method) => {
-    if (method === 'points' && userData.points < 1000) {
-      showToastMessage("Not enough points!");
-      return;
-    }
+    if (method === 'points' && userData.points < 1000) return showToastMessage("Not enough points!");
     setUserData(prev => ({ ...prev, isPro: true, points: method === 'points' ? prev.points - 1000 : prev.points }));
     showToastMessage("Welcome to PRO! All hacks unlocked.");
   };
@@ -426,244 +340,132 @@ export default function App() {
   };
 
   const openNav = (type, lat, lng) => {
-    const urls = { 
-      google: `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, 
-      apple: `http://maps.apple.com/?daddr=${lat},${lng}`, 
-      waze: `https://waze.com/ul?ll=${lat},${lng}&navigate=yes` 
-    };
+    const urls = { google: `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, apple: `http://maps.apple.com/?daddr=${lat},${lng}`, waze: `https://waze.com/ul?ll=${lat},${lng}&navigate=yes` };
     window.open(urls[type]);
   };
 
   const exportCSV = () => {
     const headers = ['ID', 'Name', 'Email', 'Status', 'Verified', 'Posts', 'Last Login'];
-    const rows = usersList.map(u => [ 
-      u.id, 
-      u.username, 
-      u.email, 
-      u.status, 
-      String(u.isVerified).toUpperCase(), 
-      u.posts || 0, 
-      u.lastLogin || u.joined 
-    ]);
-    
-    let csvContent = "data:text/csv;charset=utf-8," + headers.join(',') + "\n";
-    rows.forEach(row => {
-      csvContent += row.join(',') + "\n";
-    });
-    
+    const rows = usersList.map(u => [ u.id, u.username, u.email, u.status, String(u.isVerified).toUpperCase(), u.posts || 0, u.lastLogin || u.joined ]);
+    const csvContent = `data:text/csv;charset=utf-8,${headers.join(',')}\n${rows.map(e => e.join(',')).join('\n')}`;
     const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a"); 
-    link.setAttribute("href", encodedUri); 
-    link.setAttribute("download", `user_data_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link); 
-    link.click(); 
-    document.body.removeChild(link); 
-    showToastMessage("Excel (CSV) exported successfully!");
+    const link = document.createElement("a"); link.setAttribute("href", encodedUri); link.setAttribute("download", `user_data_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link); link.click(); document.body.removeChild(link); showToastMessage("Excel (CSV) exported successfully!");
   };
 
   const exportXML = () => {
     let xmlStr = '<?xml version="1.0" encoding="UTF-8"?>\n<users>\n';
     usersList.forEach(u => {
-      xmlStr += '  <user id="' + u.id + '">\n';
-      xmlStr += '    <name>' + u.username + '</name>\n';
-      xmlStr += '    <email>' + u.email + '</email>\n';
-      xmlStr += '    <status>' + u.status + '</status>\n';
-      xmlStr += '    <verified>' + String(u.isVerified) + '</verified>\n';
-      xmlStr += '    <posts>' + (u.posts || 0) + '</posts>\n';
-      xmlStr += '    <lastLogin>' + (u.lastLogin || u.joined) + '</lastLogin>\n';
-      xmlStr += '  </user>\n';
+      xmlStr += `  <user id="${u.id}">\n    <name>${u.username}</name>\n    <email>${u.email}</email>\n    <status>${u.status}</status>\n    <verified>${String(u.isVerified)}</verified>\n    <posts>${u.posts || 0}</posts>\n    <lastLogin>${u.lastLogin || u.joined}</lastLogin>\n  </user>\n`;
     });
     xmlStr += '</users>';
-    const blob = new Blob([xmlStr], { type: 'text/xml' }); 
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a"); 
-    link.setAttribute("href", url); 
-    link.setAttribute("download", "data.xml");
-    document.body.appendChild(link); 
-    link.click(); 
-    document.body.removeChild(link); 
-    showToastMessage("XML data structure exported successfully!");
+    const blob = new Blob([xmlStr], { type: 'text/xml' }); const url = URL.createObjectURL(blob);
+    const link = document.createElement("a"); link.setAttribute("href", url); link.setAttribute("download", "data.xml");
+    document.body.appendChild(link); link.click(); document.body.removeChild(link); showToastMessage("XML data structure exported successfully!");
   };
 
   // --- Advanced Admin Handlers ---
-  const adminTogglePin = (id) => { 
-    setHacks(prev => prev.map(h => h.id === id ? { ...h, isPinned: !h.isPinned } : h)); 
-    showToastMessage("Pin status updated."); 
-  };
-  const adminAdjustUserPoints = (id, amount) => { 
-    setUsersList(prev => prev.map(u => u.id === id ? { ...u, points: u.points + amount } : u)); 
-    showToastMessage("Added points to user."); 
-  };
-  const adminWarnUser = (id) => { 
-    setUsersList(prev => prev.map(u => u.id === id ? { ...u, warnings: u.warnings + 1 } : u)); 
-    showToastMessage("Warning sent to user."); 
-  };
-  const adminChangeUserStatus = (id, status) => { 
-    setUsersList(prev => prev.map(u => u.id === id ? { ...u, status } : u)); 
-    showToastMessage("User status changed to " + status + "."); 
-  };
-  const adminResolveReport = (id, action) => { 
-    setReportsList(prev => prev.map(r => r.id === id ? { ...r, status: 'resolved' } : r)); 
-    if (action === 'delete') {
-      showToastMessage("Content deleted and report resolved."); 
-    } else {
-      showToastMessage("Report dismissed."); 
-    }
-  };
-  const sendBroadcast = (e) => { 
-    e.preventDefault(); 
-    setGlobalAnnouncement(broadcastInput); 
-    setBroadcastInput(''); 
-    showToastMessage("Broadcast sent to all users!"); 
-  };
-  const toggleSetting = (key) => { 
-    setAppSettings(prev => ({ ...prev, [key]: !prev[key] })); 
-    showToastMessage("Setting updated."); 
-  };
-  const updateSettingValue = (key, value) => { 
-    setAppSettings(prev => ({ ...prev, [key]: value })); 
-  };
-  const adminApproveHack = (id) => { 
-    setHacks(prev => prev.map(h => h.id === id ? { ...h, status: 'approved' } : h)); 
-    showToastMessage("Hack Approved & Published!"); 
-  };
-  const adminRejectHack = (id) => { 
-    setHacks(prev => prev.filter(h => h.id !== id)); 
-    showToastMessage("Hack Rejected and Deleted."); 
-  };
-  const adminVerifyUser = (id) => { 
-    setUsersList(prev => prev.map(u => u.id === id ? { ...u, isVerified: true } : u)); 
-    showToastMessage("User Verified!"); 
-  };
-  const adminBlockUser = (id) => { 
-    setUsersList(prev => prev.map(u => u.id === id ? { ...u, status: u.status === 'blocked' ? 'active' : 'blocked' } : u)); 
-    showToastMessage("User Status Changed!"); 
-  };
-  const adminDeleteUser = (id) => { 
-    setUsersList(prev => prev.filter(u => u.id !== id)); 
-    showToastMessage("User Account Deleted."); 
-  };
-  const adminApproveBusiness = (req) => { 
-    setBusinessRequests(prev => prev.filter(b => b.id !== req.id)); 
-    setActiveBusinesses(prev => [...prev, { id: req.id, restaurant: req.restaurant, email: req.email, views: 0, promosActive: 0 }]); 
-    showToastMessage("Business Claim Approved!"); 
-  };
-  const adminRejectBusiness = (id) => { 
-    setBusinessRequests(prev => prev.map(b => b.id === id ? { ...b, status: 'rejected' } : b)); 
-    showToastMessage("Business Claim Rejected."); 
-  };
+  const adminTogglePin = (id) => { setHacks(prev => prev.map(h => h.id === id ? { ...h, isPinned: !h.isPinned } : h)); showToastMessage("Pin status updated."); };
+  const adminAdjustUserPoints = (id, amount) => { setUsersList(prev => prev.map(u => u.id === id ? { ...u, points: u.points + amount } : u)); showToastMessage("Added points to user."); };
+  const adminWarnUser = (id) => { setUsersList(prev => prev.map(u => u.id === id ? { ...u, warnings: u.warnings + 1 } : u)); showToastMessage("Warning sent to user."); };
+  const adminChangeUserStatus = (id, status) => { setUsersList(prev => prev.map(u => u.id === id ? { ...u, status } : u)); showToastMessage("User status changed to " + status + "."); };
+  const adminResolveReport = (id, action) => { setReportsList(prev => prev.map(r => r.id === id ? { ...r, status: 'resolved' } : r)); if (action === 'delete') showToastMessage("Content deleted and report resolved."); else showToastMessage("Report dismissed."); };
+  const sendBroadcast = (e) => { e.preventDefault(); setGlobalAnnouncement(broadcastInput); setBroadcastInput(''); showToastMessage("Broadcast sent to all users!"); };
+  const toggleSetting = (key) => { setAppSettings(prev => ({ ...prev, [key]: !prev[key] })); showToastMessage("Setting updated."); };
+  const updateSettingValue = (key, value) => { setAppSettings(prev => ({ ...prev, [key]: value })); };
+  const adminApproveHack = (id) => { setHacks(prev => prev.map(h => h.id === id ? { ...h, status: 'approved' } : h)); showToastMessage("Hack Approved & Published!"); };
+  const adminRejectHack = (id) => { setHacks(prev => prev.filter(h => h.id !== id)); showToastMessage("Hack Rejected and Deleted."); };
+  const adminVerifyUser = (id) => { setUsersList(prev => prev.map(u => u.id === id ? { ...u, isVerified: true } : u)); showToastMessage("User Verified!"); };
+  const adminBlockUser = (id) => { setUsersList(prev => prev.map(u => u.id === id ? { ...u, status: u.status === 'blocked' ? 'active' : 'blocked' } : u)); showToastMessage("User Status Changed!"); };
+  const adminDeleteUser = (id) => { setUsersList(prev => prev.filter(u => u.id !== id)); showToastMessage("User Account Deleted."); };
+  const adminApproveBusiness = (req) => { setBusinessRequests(prev => prev.filter(b => b.id !== req.id)); setActiveBusinesses(prev => [...prev, { id: req.id, restaurant: req.restaurant, email: req.email, views: 0, promosActive: 0 }]); showToastMessage("Business Claim Approved!"); };
+  const adminRejectBusiness = (id) => { setBusinessRequests(prev => prev.map(b => b.id === id ? { ...b, status: 'rejected' } : b)); showToastMessage("Business Claim Rejected."); };
 
   const submitBusinessFlow = (e) => {
     e.preventDefault();
     if (ownerTab === 'claim') {
-      const newReq = { 
-        id: Math.random().toString(36).substr(2, 9), 
-        restaurant: selectedRes?.name || 'Unknown', 
-        user: userData.username, 
-        email: 'business@owner.com', 
-        status: 'pending', 
-        date: new Date().toISOString().split('T')[0] 
-      };
+      const newReq = { id: Math.random().toString(36).substr(2, 9), restaurant: selectedRes?.name || 'Unknown', user: userData.username, email: 'business@owner.com', status: 'pending', date: new Date().toISOString().split('T')[0] };
       setBusinessRequests(prev => [newReq, ...prev]);
-      setShowBusinessModal(false); 
-      showToastMessage("Claim requested! Our team will verify soon.");
+      setShowBusinessModal(false); showToastMessage("Claim requested! Our team will verify soon.");
     } else {
       if (promoteListing) {
         setProcessingPayment(true);
-        setTimeout(() => { 
-          setProcessingPayment(false); 
-          finalizeBusinessAdd(); 
-        }, 1500);
-      } else { 
-        finalizeBusinessAdd(); 
-      }
+        setTimeout(() => { setProcessingPayment(false); finalizeBusinessAdd(); }, 1500);
+      } else { finalizeBusinessAdd(); }
     }
   };
 
   const finalizeBusinessAdd = () => {
-    const newRes = { 
-      id: Math.random().toString(36).substr(2, 9), 
-      name: newResForm.name, 
-      category: newResForm.category, 
-      address: newResForm.address, 
-      lat: newResForm.lat, 
-      lng: newResForm.lng, 
-      rating: 0, 
-      img: newResForm.img, 
-      verified: true, 
-      isPromoted: promoteListing 
-    };
+    const newRes = { id: Math.random().toString(36).substr(2, 9), name: newResForm.name, category: newResForm.category, address: newResForm.address, lat: newResForm.lat, lng: newResForm.lng, rating: 0, img: newResForm.img, verified: true, isPromoted: promoteListing, desc: 'A new spot submitted by a business owner.' };
     setRestaurants(prev => [newRes, ...prev]);
     setActiveBusinesses(prev => [{ id: newRes.id, restaurant: newRes.name, email: userData.email, views: 0, promosActive: 0 }, ...prev]);
-    setShowBusinessModal(false); 
-    showToastMessage(promoteListing ? "Payment Success! Promoted listing added." : "Business listed successfully.");
+    setShowBusinessModal(false); showToastMessage(promoteListing ? "Payment Success! Promoted listing added." : "Business listed successfully.");
   };
 
   // --- Views ---
   if (appState === 'login' || appState === 'register') {
     return (
       <div className="flex flex-col h-screen w-full bg-slate-50 text-slate-900 max-w-md mx-auto relative overflow-hidden font-sans">
-        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gradient-to-br from-orange-500 to-amber-500 text-white relative">
+        <div className="flex-1 flex flex-col items-center justify-center p-5 bg-gradient-to-br from-orange-500 to-amber-500 text-white relative">
           <div className="absolute top-[-50px] right-[-50px] w-64 h-64 bg-white/10 rounded-full blur-[80px]"></div>
-          <div className="w-24 h-24 bg-white rounded-[32px] flex items-center justify-center text-5xl shadow-2xl shadow-orange-900/20 mb-6 z-10 transform rotate-[-10deg]">🍔</div>
-          <h1 className="text-4xl font-black italic tracking-tighter mb-2 z-10">Tipid Menu</h1>
-          <p className="text-orange-100 font-medium mb-8 z-10 text-center">Smart Savings for the Filipino Foodie.</p>
+          
+          <h1 className="text-4xl font-black italic tracking-tighter mb-1 z-10">Tipid Menu</h1>
+          <p className="text-orange-100 font-medium mb-4 z-10 text-center text-sm px-6">Smart Savings for the Filipino Foodie.</p>
 
-          <div className="w-full bg-white p-6 sm:p-8 rounded-[32px] shadow-2xl z-10 text-slate-800 flex flex-col gap-4 animate-in slide-in-from-bottom-8">
-            <h2 className="text-2xl font-black mb-1 text-center text-slate-900">{appState === 'login' ? 'Welcome Back' : 'Create Account'}</h2>
+          <div className="w-full bg-white p-5 rounded-[32px] shadow-2xl z-10 text-slate-800 flex flex-col gap-3 animate-in slide-in-from-bottom-8">
             
             {/* Auth Method Toggles */}
-            <div className="flex bg-slate-100 p-1 rounded-xl w-full mb-2">
-              <button onClick={() => { setAuthMethod('email'); setAuthError(''); }} className={`flex-1 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${authMethod === 'email' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+            <div className="flex bg-slate-100 p-1 rounded-xl w-full">
+              <button onClick={() => { setAuthMethod('email'); setAuthError(''); }} className={`flex-1 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${authMethod === 'email' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
                 <Mail size={14}/> Email
               </button>
-              <button onClick={() => { setAuthMethod('mobile'); setAuthError(''); }} className={`flex-1 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${authMethod === 'mobile' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+              <button onClick={() => { setAuthMethod('mobile'); setAuthError(''); }} className={`flex-1 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${authMethod === 'mobile' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
                 <Phone size={14}/> Mobile
               </button>
             </div>
 
-            {authError && <div className="bg-red-50 border border-red-100 text-red-600 text-xs font-bold p-3 rounded-xl text-center">{authError}</div>}
+            {authError && <div className="bg-red-50 border border-red-100 text-red-600 text-[10px] font-bold p-2 rounded-xl text-center">{authError}</div>}
             
-            <form onSubmit={handleStandardAuth} className="flex flex-col gap-3">
+            <form onSubmit={handleStandardAuth} className="flex flex-col gap-2.5">
               {authMethod === 'email' ? (
                 <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Email Address</label>
-                  <input required type="email" value={authForm.email} onChange={e => setAuthForm({...authForm, email: e.target.value})} className="w-full bg-slate-50 px-5 py-3.5 rounded-2xl font-bold text-slate-900 border border-slate-100 outline-none focus:ring-2 focus:ring-orange-500/20 mt-1 transition-all" placeholder="juan@example.com" />
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Email</label>
+                  <input required type="email" value={authForm.email} onChange={e => setAuthForm({...authForm, email: e.target.value})} className="w-full bg-slate-50 px-4 py-2.5 rounded-xl font-bold text-slate-900 border border-slate-100 outline-none focus:ring-2 focus:ring-orange-500/20 mt-0.5 transition-all text-sm" placeholder="juan@example.com" />
                 </div>
               ) : (
                 <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Mobile Number</label>
-                  <div className="flex gap-2 mt-1">
-                    <span className="bg-slate-100 px-4 py-3.5 rounded-2xl font-bold text-slate-500 border border-slate-100 flex items-center">+63</span>
-                    <input required type="tel" value={authForm.mobile} onChange={e => setAuthForm({...authForm, mobile: e.target.value.replace(/\D/g, '')})} maxLength={10} className="flex-1 bg-slate-50 px-5 py-3.5 rounded-2xl font-bold text-slate-900 border border-slate-100 outline-none focus:ring-2 focus:ring-orange-500/20 transition-all" placeholder="912 345 6789" />
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Mobile</label>
+                  <div className="flex gap-1.5 mt-0.5">
+                    <span className="bg-slate-100 px-3 py-2 rounded-xl font-bold text-slate-500 border border-slate-100 flex items-center text-sm">+63</span>
+                    <input required type="tel" value={authForm.mobile} onChange={e => setAuthForm({...authForm, mobile: e.target.value.replace(/\D/g, '')})} maxLength={10} className="flex-1 bg-slate-50 px-4 py-2.5 rounded-xl font-bold text-slate-900 border border-slate-100 outline-none focus:ring-2 focus:ring-orange-500/20 transition-all text-sm" placeholder="912 345 6789" />
                   </div>
                 </div>
               )}
 
               <div>
                 <label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Password</label>
-                <input required type="password" value={authForm.password} onChange={e => setAuthForm({...authForm, password: e.target.value})} className="w-full bg-slate-50 px-5 py-3.5 rounded-2xl font-bold text-slate-900 border border-slate-100 outline-none focus:ring-2 focus:ring-orange-500/20 mt-1 transition-all" placeholder="••••••••" />
+                <input required type="password" value={authForm.password} onChange={e => setAuthForm({...authForm, password: e.target.value})} className="w-full bg-slate-50 px-4 py-2.5 rounded-xl font-bold text-slate-900 border border-slate-100 outline-none focus:ring-2 focus:ring-orange-500/20 mt-0.5 transition-all text-sm" placeholder="••••••••" />
               </div>
 
-              <button disabled={authLoading} type="submit" className="w-full py-4 mt-2 bg-orange-600 text-white font-black rounded-2xl shadow-lg shadow-orange-600/20 uppercase text-xs tracking-widest hover:scale-[1.02] active:scale-95 transition-all">
+              <button disabled={authLoading} type="submit" className="w-full py-3 mt-1 bg-orange-600 text-white font-black rounded-2xl shadow-lg shadow-orange-600/20 uppercase text-[10px] tracking-widest hover:scale-[1.01] active:scale-95 transition-all">
                 {authLoading ? 'Please wait...' : (appState === 'login' ? 'Sign In' : 'Sign Up')}
               </button>
             </form>
 
             <div className="text-center">
-              <button type="button" onClick={() => setAppState(appState === 'login' ? 'register' : 'login')} className="text-xs font-bold text-slate-400 hover:text-orange-500 transition-colors">
-                {appState === 'login' ? "Don't have an account? Sign Up" : "Already have an account? Sign In"}
+              <button type="button" onClick={() => setAppState(appState === 'login' ? 'register' : 'login')} className="text-[10px] font-bold text-slate-400 hover:text-orange-500 transition-colors uppercase tracking-wide">
+                {appState === 'login' ? "New account? Sign Up" : "Have account? Sign In"}
               </button>
             </div>
             
-            <div className="flex items-center gap-4 my-1"><div className="h-px bg-slate-100 flex-1"></div><span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">OR</span><div className="h-px bg-slate-100 flex-1"></div></div>
+            <div className="flex items-center gap-3 my-0.5"><div className="h-px bg-slate-100 flex-1"></div><span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">OR</span><div className="h-px bg-slate-100 flex-1"></div></div>
             
             {/* Facebook Auth Button */}
-            <button onClick={handleFacebookAuth} disabled={authLoading} type="button" className="relative z-20 w-full py-3.5 bg-[#1877F2] hover:bg-[#166FE5] text-white font-black rounded-2xl flex justify-center items-center gap-2 uppercase text-xs tracking-widest active:scale-95 transition-all shadow-md">
-              <Facebook size={18} className="fill-white" /> Continue with Facebook
+            <button onClick={handleFacebookAuth} disabled={authLoading} type="button" className="relative z-20 w-full py-2.5 bg-[#1877F2] hover:bg-[#166FE5] text-white font-black rounded-2xl flex justify-center items-center gap-2 uppercase text-[10px] tracking-widest active:scale-95 transition-all shadow-md">
+              <Facebook size={16} className="fill-white" /> Facebook
             </button>
 
-            <button type="button" onClick={handleGuestLogin} className="relative z-20 w-full py-3.5 bg-slate-50 hover:bg-slate-100 text-slate-600 font-black rounded-2xl border border-slate-200 uppercase text-xs tracking-widest active:scale-95 transition-all shadow-sm">
+            <button type="button" onClick={handleGuestLogin} className="relative z-20 w-full py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 font-black rounded-2xl border border-slate-200 uppercase text-[10px] tracking-widest active:scale-95 transition-all shadow-sm">
               Continue as Guest
             </button>
           </div>
@@ -1065,7 +867,7 @@ export default function App() {
 
   const renderTabBar = () => (
     <nav className="bg-white/80 backdrop-blur-xl border-t border-slate-100 px-6 py-3 flex justify-between items-center sticky bottom-0 z-30 pb-safe">
-      <button onClick={() => setCurrentTab('map')} className={`flex flex-col items-center gap-1.5 transition-colors ${currentTab === 'map' ? 'text-orange-600' : 'text-slate-300'}`}><MapPin size={22} /><span className="text-[10px] font-black uppercase tracking-widest">Near</span></button>
+      <button onClick={() => setCurrentTab('map')} className={`flex flex-col items-center gap-1.5 transition-colors ${currentTab === 'map' ? 'text-orange-600' : 'text-slate-300'}`}><MapIcon size={22} /><span className="text-[10px] font-black uppercase tracking-widest">Near</span></button>
       <button onClick={() => setCurrentTab('spots')} className={`flex flex-col items-center gap-1.5 transition-colors ${currentTab === 'spots' ? 'text-orange-600' : 'text-slate-300'}`}><List size={22} /><span className="text-[10px] font-black uppercase tracking-widest">Spots</span></button>
       <button onClick={() => { if(selectedRes) { setShowAddHackModal(true); } else { setCurrentTab('spots'); } }} className="bg-gradient-to-br from-orange-500 to-amber-500 p-4 rounded-full text-white shadow-xl shadow-orange-500/30 transform -translate-y-6 hover:scale-110 active:scale-95 transition-all"><Plus size={24}/></button>
       <button onClick={() => setCurrentTab('pro')} className={`flex flex-col items-center gap-1.5 transition-colors ${currentTab === 'pro' ? 'text-orange-600' : 'text-slate-300'}`}><Zap size={22} className={currentTab === 'pro' ? 'fill-orange-50' : ''}/><span className="text-[10px] font-black uppercase tracking-widest">PRO</span></button>
@@ -1079,8 +881,16 @@ export default function App() {
         <LeafletMap 
           center={mapCenter} 
           userLocation={userLoc}
-          markers={restaurants.map(r => ({...r, type: 'business'}))}
-          onMarkerClick={(m) => { setSelectedRes(m); setActiveView('restaurant'); }}
+          markers={restaurants.map((r, index) => ({...r, type: 'business', isLocked: !userData.isPro && index >= 5, img: (!userData.isPro && index >= 5) ? '🔒' : r.img}))}
+          onMarkerClick={(m) => { 
+            if (m.isLocked) {
+              setCurrentTab('pro');
+              showToastMessage("Unlock PRO to view premium spots!");
+            } else {
+              setSelectedRes(m); 
+              setActiveView('restaurant'); 
+            }
+          }}
           onRecenter={handleGetLocation}
         />
       ) : (
@@ -1091,6 +901,11 @@ export default function App() {
 
   const renderSpots = () => {
     const filtered = restaurants.filter(r => r.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    
+    // Determine spots to display
+    const displayedSpots = userData.isPro ? filtered : filtered.slice(0, 5);
+    const lockedCount = filtered.length - displayedSpots.length;
+
     return (
       <div className="flex-1 overflow-y-auto bg-slate-50 p-5 pb-24">
         {globalAnnouncement && (
@@ -1108,22 +923,62 @@ export default function App() {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
           <input type="text" placeholder="Search restaurants, brands..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white border border-slate-200 py-3.5 pl-12 pr-4 rounded-2xl font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 shadow-sm transition-all" />
         </div>
-        <h3 className="font-black text-slate-800 mb-6 uppercase tracking-widest text-sm flex items-center gap-2"><List size={18} className="text-orange-500" /> Discover Spots</h3>
-        <div className="space-y-3">
-          {filtered.map(res => (
+        
+        <div className="flex justify-between items-center mb-4 px-1">
+          <h3 className="font-black text-slate-800 uppercase tracking-widest text-sm flex items-center gap-2"><List size={18} className="text-orange-500" /> Discover Spots</h3>
+          {!userData.isPro && <span className="text-[10px] font-bold text-slate-400 uppercase bg-slate-200 px-2 py-1 rounded-lg">Free Plan (5/5)</span>}
+        </div>
+
+        <div className="space-y-3 mb-6">
+          {displayedSpots.map(res => (
             <div key={res.id} onClick={() => { setSelectedRes(res); setActiveView('restaurant'); }} className={`bg-white p-4 rounded-2xl shadow-sm border flex items-center gap-4 cursor-pointer transition-colors group active:scale-[0.98] ${res.isPromoted ? 'border-amber-300 shadow-[0_0_15px_rgba(251,191,36,0.15)] bg-amber-50/20' : 'border-slate-100 hover:border-orange-200'}`}>
-              <div className={`w-14 h-14 rounded-xl flex items-center justify-center text-3xl border ${res.isPromoted ? 'bg-gradient-to-br from-amber-100 to-yellow-200 border-amber-300' : 'bg-orange-50 border-orange-100'}`}>{res.img}</div>
-              <div className="flex-1">
-                <h4 className="font-black text-slate-800 group-hover:text-orange-600 transition-colors flex items-center gap-2">
+              <div className={`w-14 h-14 rounded-xl flex items-center justify-center text-3xl border shrink-0 ${res.isPromoted ? 'bg-gradient-to-br from-amber-100 to-yellow-200 border-amber-300' : 'bg-orange-50 border-orange-100'}`}>{res.img}</div>
+              <div className="flex-1 min-w-0">
+                <h4 className="font-black text-slate-800 group-hover:text-orange-600 transition-colors flex items-center gap-2 truncate">
                   {res.name}
-                  {res.isPromoted && <span className="bg-amber-500 text-white text-[8px] px-1.5 py-0.5 rounded font-black uppercase tracking-widest">AD</span>}
+                  {res.isPromoted && <span className="bg-amber-500 text-white text-[8px] px-1.5 py-0.5 rounded font-black uppercase tracking-widest shrink-0">AD</span>}
                 </h4>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{res.category}</p>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest truncate">{res.category}</p>
+                {res.desc && <p className="text-xs text-slate-500 mt-1 line-clamp-1">{res.desc}</p>}
               </div>
-              <ChevronRight className="text-slate-300" size={20} />
+              <ChevronRight className="text-slate-300 shrink-0" size={20} />
             </div>
           ))}
+
+          {/* Locked Spots Placeholder */}
+          {!userData.isPro && filtered.length > 5 && filtered.slice(5, 7).map((res) => (
+             <div key={res.id} onClick={() => setCurrentTab('pro')} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4 cursor-pointer relative overflow-hidden group">
+                <div className="absolute inset-0 bg-slate-50/90 backdrop-blur-[2px] z-10 flex items-center justify-between px-5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center text-slate-500"><Lock size={18}/></div>
+                    <div>
+                      <h4 className="font-black text-slate-700">Premium Spot</h4>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Unlock with PRO</p>
+                    </div>
+                  </div>
+                  <button className="px-3 py-1.5 bg-orange-100 text-orange-600 rounded-lg text-xs font-black uppercase tracking-widest">Unlock</button>
+                </div>
+                {/* Blurred Background Content */}
+                <div className="w-14 h-14 bg-slate-100 rounded-xl flex items-center justify-center text-3xl blur-[2px] opacity-50 shrink-0">{res.img}</div>
+                <div className="flex-1 blur-[2px] opacity-50 min-w-0">
+                  <h4 className="font-black text-slate-800 truncate">{res.name}</h4>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest truncate">{res.category}</p>
+                </div>
+             </div>
+          ))}
         </div>
+
+        {/* Upgrade Banner */}
+        {!userData.isPro && lockedCount > 0 && (
+          <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 text-center shadow-xl border border-slate-700 relative overflow-hidden">
+            <Crown size={60} className="absolute -top-4 -right-4 text-white/5" />
+            <h4 className="text-lg font-black text-white mb-2">Want to see {lockedCount} more spots?</h4>
+            <p className="text-xs text-slate-300 font-medium mb-4">You've hit the limit for the free version. Upgrade to PRO for unrestricted access to all secret locations.</p>
+            <button onClick={() => setCurrentTab('pro')} className="bg-orange-500 hover:bg-orange-600 text-white w-full py-3.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-[0_0_20px_rgba(249,115,22,0.3)]">
+              Unlock All Spots
+            </button>
+          </div>
+        )}
       </div>
     );
   };
@@ -1154,12 +1009,16 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-4">
-            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl border shadow-sm ${selectedRes.isPromoted ? 'bg-gradient-to-br from-amber-100 to-yellow-200 border-amber-300' : 'bg-orange-50 border-orange-100'}`}>{selectedRes.img}</div>
-            <div>
-              <h2 className="text-2xl font-black text-slate-800">{selectedRes.name}</h2>
-              <div className="flex items-center gap-2 mt-1"><span className="text-xs font-bold text-slate-400 uppercase tracking-wide">{selectedRes.category} • ⭐ {selectedRes.rating}</span></div>
+            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl border shadow-sm shrink-0 ${selectedRes.isPromoted ? 'bg-gradient-to-br from-amber-100 to-yellow-200 border-amber-300' : 'bg-orange-50 border-orange-100'}`}>{selectedRes.img}</div>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-2xl font-black text-slate-800 leading-tight mb-1">{selectedRes.name}</h2>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide bg-slate-100 px-2 py-0.5 rounded-md">{selectedRes.category}</span>
+                <span className="text-xs font-bold text-slate-500 flex items-center gap-1"><Star size={14} className="fill-orange-400 text-orange-400"/> {selectedRes.rating}</span>
+              </div>
             </div>
           </div>
+          {selectedRes.desc && <p className="text-sm text-slate-600 leading-snug">{selectedRes.desc}</p>}
         </div>
         
         <div className="p-5 space-y-6">
@@ -1318,8 +1177,10 @@ export default function App() {
       
       {activeView === 'main' && renderTabBar()}
       
+      {/* Toast */}
       {toast && <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-5 py-2.5 rounded-full shadow-2xl z-[200] border border-slate-700 animate-in fade-in slide-in-from-top-4 flex items-center gap-2"><Info size={16} className="text-orange-400" /><p className="font-bold text-sm whitespace-nowrap">{toast}</p></div>}
 
+      {/* Secret Admin Modal */}
       {showAdminAuthModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-slate-900/90 backdrop-blur-sm animate-in fade-in">
           <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-[40px] p-8 shadow-2xl relative overflow-hidden">
@@ -1336,6 +1197,7 @@ export default function App() {
         </div>
       )}
 
+      {/* Verification Modal */}
       {showVerifyModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-sm rounded-[40px] p-8 shadow-2xl relative overflow-hidden">
@@ -1353,6 +1215,7 @@ export default function App() {
         </div>
       )}
 
+      {/* Add Hack Modal (Updated to support creating new restaurant) */}
       {showAddHackModal && (
         <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-md sm:rounded-[40px] rounded-t-[40px] p-8 pt-10 shadow-2xl relative max-h-[90vh] flex flex-col animate-in slide-in-from-bottom">
@@ -1394,7 +1257,7 @@ export default function App() {
                 <div className="mb-6 flex-shrink-0">
                   <h3 className="text-2xl font-black mb-1 flex items-center gap-2 tracking-tight text-slate-800"><Plus size={24} className="text-orange-500"/> Share Hack</h3>
                   {selectedRes ? (
-                    <p className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><MapPin size={12} className="text-orange-400"/> {selectedRes.name}</p>
+                    <p className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><MapPinIcon size={12} className="text-orange-400"/> {selectedRes.name}</p>
                   ) : (
                     <div className="mt-3 relative z-10">
                       <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-100 rounded-xl mb-3">
@@ -1512,7 +1375,7 @@ export default function App() {
               ) : (
                 <form onSubmit={submitBusinessFlow} className="space-y-5">
                   <div className="flex items-start gap-2 bg-blue-50 border border-blue-100 p-3 rounded-xl mb-2">
-                    <Info size={16} className="text-blue-500 shrink-0 mt-0.5"/>
+                    <span className="text-blue-500 mt-0.5"><Info size={16}/></span>
                     <p className="text-[10px] font-bold text-blue-700 leading-snug">Owners: Get more foot traffic by adding your spot. Pin your exact location below.</p>
                   </div>
 
