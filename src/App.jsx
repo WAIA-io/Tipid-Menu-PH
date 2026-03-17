@@ -7,22 +7,54 @@ import {
   AlertTriangle, BarChart3, Settings, MessageSquare, Pin, Megaphone,
   TrendingUp, EyeOff, AlertOctagon, Bell, Users, Activity,
   FileSpreadsheet, FileCode2, Store, LogOut, Trophy,
-  Smartphone, Instagram, Link as LinkIcon, Compass, Facebook, Mail, Phone, Crown
+  Smartphone, Instagram, Link as LinkIcon, Compass, Facebook, Mail, Phone
 } from 'lucide-react';
 
-// --- Default Location: Tayuman, Tondo, Manila ---
+// --- Firebase Integration ---
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, FacebookAuthProvider, signInWithPopup } from 'firebase/auth';
+import { getFirestore, collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+
+// Initialize Firebase OUTSIDE the component to prevent re-initialization
+let app, auth, db, fbProvider;
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'tipid-menu-ph';
+
+try {
+  // Try to use the environment config first (for preview compatibility)
+  // If not running in preview, fallback to your actual Firebase config
+  let firebaseConfig;
+  
+  if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+    firebaseConfig = typeof __firebase_config === 'string' ? JSON.parse(__firebase_config) : __firebase_config;
+  } else {
+    // YOUR ACTUAL CONFIGURATION FROM SCREENSHOT
+    firebaseConfig = {
+      apiKey: "AIzaSyD_94cFdfFoIy6YgdMhKYuS9M2vjRJN8LU",
+      authDomain: "tipid-menu-ph.firebaseapp.com",
+      projectId: "tipid-menu-ph",
+      storageBucket: "tipid-menu-ph.firebasestorage.app",
+      messagingSenderId: "617709691995",
+      appId: "1:617709691995:web:42813eb870c1d98135cb7e"
+    };
+  }
+
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = getFirestore(app);
+  fbProvider = new FacebookAuthProvider();
+} catch (e) {
+  console.error("Firebase init error:", e);
+}
+
+// --- Default Location & Mock Data Fallbacks ---
 const DEFAULT_LOC = { lat: 14.6116, lng: 120.9780 };
 
-// --- Mock Data ---
 const MOCK_RESTAURANTS = [
-  { id: '1', name: 'Jollibee SM San Lazaro', category: 'Fast Food', rating: 4.8, address: 'Tayuman St', lat: 14.6125, lng: 120.9790, img: '🐝', verified: true, desc: 'The classic Filipino fast-food chain serving world-famous Chickenjoy, sweet style spaghetti, and Peach Mango Pie.' },
-  { id: '2', name: "McDonald's Tayuman", category: 'Fast Food', rating: 4.5, address: 'Tayuman cor Rizal Ave', lat: 14.6110, lng: 120.9770, img: '🍔', verified: true, desc: 'Famous for its world-class fries, Big Mac, and affordable localized menu items like McSpaghetti.' },
-  { id: '3', name: 'Mang Inasal', category: 'Fast Food', rating: 4.7, address: 'SM City San Lazaro', lat: 14.6130, lng: 120.9760, img: '🍗', verified: true, desc: 'Your go-to spot for unlimited rice, authentic grilled chicken inasal, and creamy halo-halo.' },
-  { id: '4', name: 'Greenwich', category: 'Pizza', rating: 4.3, address: 'Tayuman Center', lat: 14.6105, lng: 120.9795, img: '🍕', verified: true, desc: 'Serving Filipino-style pizza and pasta favorites perfect for sharing with the barkada.' },
-  { id: '5', name: 'Starbucks', category: 'Coffee', rating: 4.6, address: 'SM San Lazaro', lat: 14.6140, lng: 120.9800, img: '☕', verified: false, desc: 'Premium coffee, cozy ambiance, and a great place for casual meetings or studying.' },
-  { id: '6', name: 'Chowking', category: 'Fast Food', rating: 4.4, address: 'LRT Tayuman Station', lat: 14.6160, lng: 120.9810, img: '🥡', verified: true, desc: 'Chinese fast food favorites blending traditional flavors with local tastes like Chao Fan and Siomai.' },
-  { id: '7', name: 'KFC', category: 'Fast Food', rating: 4.5, address: 'SM City San Lazaro', lat: 14.6135, lng: 120.9765, img: '🍗', verified: true, desc: 'Finger lickin\' good fried chicken with their signature secret recipe of 11 herbs and spices.' },
-  { id: '8', name: 'Burger King', category: 'Fast Food', rating: 4.6, address: 'Espana Blvd', lat: 14.6080, lng: 120.9820, img: '🍔', verified: true, desc: 'Home of the Whopper, flame-grilled beef patties, and thick-cut onion rings.' }
+  { id: '1', name: 'Jollibee SM San Lazaro', category: 'Fast Food', rating: 4.8, address: 'Tayuman St', lat: 14.6125, lng: 120.9790, img: '🐝', verified: true },
+  { id: '2', name: "McDonald's Tayuman", category: 'Fast Food', rating: 4.5, address: 'Tayuman cor Rizal Ave', lat: 14.6110, lng: 120.9770, img: '🍔', verified: true },
+  { id: '3', name: 'Mang Inasal', category: 'Fast Food', rating: 4.7, address: 'SM City San Lazaro', lat: 14.6130, lng: 120.9760, img: '🍗', verified: true },
+  { id: '4', name: 'Greenwich', category: 'Pizza', rating: 4.3, address: 'Tayuman Center', lat: 14.6105, lng: 120.9795, img: '🍕', verified: true },
+  { id: '5', name: 'Starbucks', category: 'Coffee', rating: 4.6, address: 'SM San Lazaro', lat: 14.6140, lng: 120.9800, img: '☕', verified: false }
 ];
 
 const MOCK_PROMOS = [
@@ -57,36 +89,44 @@ const LeafletMap = ({ center, markers = [], onMarkerClick, onMapClick, userLocat
       }).setView([center.lat, center.lng], mini ? 16 : 15);
       
       window.L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        attribution: mini ? '' : '&copy; <a href="https://carto.com/attributions">CARTO</a>', subdomains: 'abcd', maxZoom: 20
+        attribution: mini ? '' : '&copy; <a href="https://carto.com/attributions">CARTO</a>, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', 
+        subdomains: 'abcd', 
+        maxZoom: 20
       }).addTo(map);
       mapInstance.current = map;
     }
 
     const map = mapInstance.current;
     map.off('click');
-    if (onMapClick) map.on('click', (e) => onMapClick(e.latlng));
+    if (onMapClick) {
+      map.on('click', (e) => onMapClick(e.latlng));
+    }
   }, [mini, onMapClick, center.lat, center.lng]);
 
   useEffect(() => {
     if (!mapInstance.current || !window.L) return;
     const map = mapInstance.current;
     map.setView([center.lat, center.lng]);
-    map.eachLayer((layer) => { if (layer instanceof window.L.Marker) layer.remove(); });
+    map.eachLayer((layer) => { 
+      if (layer instanceof window.L.Marker) {
+        layer.remove(); 
+      }
+    });
 
     markers.forEach(m => {
       const isUser = m.type === 'user';
       const isPromoted = m.isPromoted;
-      const isLocked = m.isLocked; // Premium Lock
-      
-      const borderColor = isLocked ? 'border-slate-300' : isUser ? 'border-blue-500' : isPromoted ? 'border-amber-400' : 'border-orange-500';
-      const bgColor = isLocked ? 'bg-slate-200 opacity-90' : isPromoted ? 'bg-gradient-to-br from-amber-200 to-yellow-400' : 'bg-white';
+      const borderColor = isUser ? 'border-blue-500' : isPromoted ? 'border-amber-400' : 'border-orange-500';
+      const bgColor = isPromoted ? 'bg-gradient-to-br from-amber-200 to-yellow-400' : 'bg-white';
       const glow = isPromoted ? 'shadow-[0_0_15px_rgba(251,191,36,0.8)]' : 'shadow-lg';
-      const badgeHtml = isPromoted && !isLocked ? '<div class="absolute -top-1 -right-1 bg-amber-500 text-white text-[8px] px-1 rounded font-black border border-white">AD</div>' : '';
+      const badgeHtml = isPromoted ? '<div class="absolute -top-1 -right-1 bg-amber-500 text-white text-[8px] px-1 rounded font-black border border-white">AD</div>' : '';
       const iconHtml = `<div class="w-10 h-10 ${bgColor} rounded-full flex items-center justify-center ${glow} border-2 ${borderColor} text-xl relative">${m.img || '📍'}${badgeHtml}</div>`;
       
       const icon = window.L.divIcon({ className: 'bg-transparent', html: iconHtml, iconSize: [40, 40], iconAnchor: [20, 40] });
       const marker = window.L.marker([m.lat, m.lng], { icon }).addTo(map);
-      if (onMarkerClick) marker.on('click', () => onMarkerClick(m));
+      if (onMarkerClick) {
+        marker.on('click', () => onMarkerClick(m));
+      }
     });
 
     if (userLocation) {
@@ -98,7 +138,10 @@ const LeafletMap = ({ center, markers = [], onMarkerClick, onMapClick, userLocat
 
   useEffect(() => {
     return () => {
-      if (mapInstance.current) { mapInstance.current.remove(); mapInstance.current = null; }
+      if (mapInstance.current) { 
+        mapInstance.current.remove(); 
+        mapInstance.current = null; 
+      }
     };
   }, []);
 
@@ -120,12 +163,12 @@ export default function App() {
   const [authForm, setAuthForm] = useState({ email: '', password: '', mobile: '' });
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
+  const [firebaseUser, setFirebaseUser] = useState(null);
   
   const [leafletReady, setLeafletReady] = useState(false);
   const [mapCenter, setMapCenter] = useState(DEFAULT_LOC);
   const [userLoc, setUserLoc] = useState(DEFAULT_LOC);
 
-  // User Data State (In-Memory)
   const [userData, setUserData] = useState({ 
     points: 50, isPro: false, isVerified: false, fbVerified: false, authProvider: 'guest',
     username: 'Foodie', fullName: '', email: '', mobile: '', dob: '', whatsapp: '', messenger: '', instagram: '', avatar: '👤', photoURL: '',
@@ -183,10 +226,73 @@ export default function App() {
 
   const userTier = useMemo(() => TIERS.find(t => (userData.points || 0) >= t.minPoints) || TIERS[TIERS.length - 1], [userData.points]);
 
+  // --- FIREBASE INITIALIZATION & SYNC ---
   useEffect(() => {
-    if (window.L) { setLeafletReady(true); return; }
-    const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(style);
-    const script = document.createElement('script'); script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'; script.async = true; script.onload = () => setLeafletReady(true); document.head.appendChild(script);
+    if (!auth) return;
+    
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (err) {
+        console.error("Auth init failed:", err);
+      }
+    };
+    
+    initAuth();
+
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setFirebaseUser(user);
+    });
+    
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!firebaseUser || !db) return;
+    
+    // Connect to the Live Hacks Database
+    const hacksRef = collection(db, 'artifacts', appId, 'public', 'data', 'hacks');
+    
+    const unsubscribeHacks = onSnapshot(hacksRef, (snapshot) => {
+      if (snapshot.empty) {
+        // Seed the database with mock data initially so the UI is fully populated
+        MOCK_HACKS.forEach(async (hack) => {
+          try {
+            await setDoc(doc(hacksRef, hack.id), hack);
+          } catch (e) {
+            console.error("Error seeding data:", e);
+          }
+        });
+      } else {
+        const liveHacks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setHacks(liveHacks);
+      }
+    }, (error) => {
+      console.error("Hacks listener error:", error);
+    });
+
+    return () => unsubscribeHacks();
+  }, [firebaseUser]);
+
+  // --- MAP ENGINE LOAD ---
+  useEffect(() => {
+    if (window.L) { 
+      setLeafletReady(true); 
+      return; 
+    }
+    const style = document.createElement('link'); 
+    style.rel = 'stylesheet'; 
+    style.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; 
+    document.head.appendChild(style);
+    const script = document.createElement('script'); 
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'; 
+    script.async = true; 
+    script.onload = () => setLeafletReady(true); 
+    document.head.appendChild(script);
   }, []);
 
   const showToastMessage = (msg) => { 
@@ -199,33 +305,50 @@ export default function App() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition((pos) => {
         const newLoc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        setUserLoc(newLoc); setMapCenter(newLoc); showToastMessage("Location updated!");
-      }, () => { showToastMessage("Location access denied. Using default."); setMapCenter(DEFAULT_LOC); });
+        setUserLoc(newLoc); 
+        setMapCenter(newLoc); 
+        showToastMessage("Location updated!");
+      }, () => { 
+        showToastMessage("Location access denied. Using default."); 
+        setMapCenter(DEFAULT_LOC); 
+      });
     }
   };
 
   const handleLogoTap = () => {
     logoTapCount.current += 1;
-    if (logoTapTimeout.current) clearTimeout(logoTapTimeout.current);
+    if (logoTapTimeout.current) {
+      clearTimeout(logoTapTimeout.current);
+    }
     if (logoTapCount.current >= 10) {
-      logoTapCount.current = 0; setShowAdminAuthModal(true);
+      logoTapCount.current = 0; 
+      setShowAdminAuthModal(true);
     } else {
-      logoTapTimeout.current = setTimeout(() => { logoTapCount.current = 0; }, 1000);
+      logoTapTimeout.current = setTimeout(() => { 
+        logoTapCount.current = 0; 
+      }, 1000);
     }
   };
 
   const handleAdminLogin = (e) => {
     e.preventDefault();
     if (adminPasswordInput === 'foodhacks101') {
-      setShowAdminAuthModal(false); setAdminPasswordInput(''); setUserData(prev => ({ ...prev, isAdmin: true })); setActiveView('admin'); showToastMessage("Super Admin Access Granted.");
+      setShowAdminAuthModal(false); 
+      setAdminPasswordInput(''); 
+      setUserData(prev => ({ ...prev, isAdmin: true })); 
+      setActiveView('admin'); 
+      showToastMessage("Super Admin Access Granted.");
     } else {
-      setAdminPasswordInput(''); showToastMessage("Incorrect admin password.");
+      setAdminPasswordInput(''); 
+      showToastMessage("Incorrect admin password.");
     }
   };
 
   const handleAdminLogout = () => {
     if (window.confirm("Are you sure you want to log out of the Admin Panel?")) {
-      setUserData(prev => ({ ...prev, isAdmin: false })); setActiveView('main'); showToastMessage("Logged out of Admin Panel.");
+      setUserData(prev => ({ ...prev, isAdmin: false })); 
+      setActiveView('main'); 
+      showToastMessage("Logged out of Admin Panel.");
     }
   };
 
@@ -253,11 +376,28 @@ export default function App() {
     }, 800);
   };
 
-  const handleFacebookAuth = () => {
+  const handleFacebookAuth = async () => {
     setAuthLoading(true);
-    setTimeout(() => {
-      setAuthLoading(false);
-      setAppState('main');
+    try {
+      if (auth && fbProvider) {
+        const result = await signInWithPopup(auth, fbProvider);
+        const fbUser = result.user;
+        
+        setUserData(prev => ({
+          ...prev,
+          username: fbUser.displayName || 'FB_Foodie23',
+          fullName: fbUser.displayName || 'Juan Dela Cruz',
+          email: fbUser.email || 'juan.fb@example.com',
+          photoURL: fbUser.photoURL || 'https://i.pravatar.cc/150?img=11',
+          isVerified: true, 
+          fbVerified: true,
+          authProvider: 'facebook'
+        }));
+      } else {
+        throw new Error("Auth not initialized");
+      }
+    } catch (e) {
+      console.warn("Real FB Auth failed, using mock payload for preview:", e);
       setUserData(prev => ({
         ...prev,
         username: 'FB_Foodie23',
@@ -269,24 +409,41 @@ export default function App() {
         fbVerified: true,
         authProvider: 'facebook'
       }));
+    } finally {
+      setAuthLoading(false);
+      setAppState('main');
       showToastMessage("Connected with Facebook!");
-    }, 1200);
+    }
   };
   
-  const handleOtpChange = (e) => { setOtpInput(e.target.value.replace(/[^0-9]/g, '')); };
+  const handleOtpChange = (e) => { 
+    setOtpInput(e.target.value.replace(/[^0-9]/g, '')); 
+  };
 
   const handleVerifyOTP = (e) => {
     e.preventDefault();
     if (otpInput === '1234') {
       setUserData(prev => ({ ...prev, isVerified: true, points: prev.points + 100 }));
-      setShowVerifyModal(false); setOtpInput(''); showToastMessage("Verified! +100 Points");
-    } else showToastMessage("Invalid OTP. Hint: Use 1234");
+      setShowVerifyModal(false); 
+      setOtpInput(''); 
+      showToastMessage("Verified! +100 Points");
+    } else {
+      showToastMessage("Invalid OTP. Hint: Use 1234");
+    }
   };
 
   const handleOpenEditProfile = () => {
     setEditForm({
-      username: userData.username || '', fullName: userData.fullName || '', email: userData.email || '', mobile: userData.mobile || '',
-      password: '', dob: userData.dob || '', whatsapp: userData.whatsapp || '', messenger: userData.messenger || '', instagram: userData.instagram || '', avatar: userData.avatar || '👤'
+      username: userData.username || '', 
+      fullName: userData.fullName || '', 
+      email: userData.email || '', 
+      mobile: userData.mobile || '',
+      password: '', 
+      dob: userData.dob || '', 
+      whatsapp: userData.whatsapp || '', 
+      messenger: userData.messenger || '', 
+      instagram: userData.instagram || '', 
+      avatar: userData.avatar || '👤'
     });
     setShowEditProfileModal(true);
   };
@@ -294,40 +451,90 @@ export default function App() {
   const handleUpdateProfile = (e) => {
     e.preventDefault();
     setUserData(prev => ({ 
-      ...prev, username: editForm.username, fullName: editForm.fullName, email: editForm.email, mobile: editForm.mobile,
-      dob: editForm.dob, whatsapp: editForm.whatsapp, messenger: editForm.messenger, instagram: editForm.instagram, avatar: editForm.avatar 
+      ...prev, 
+      username: editForm.username, 
+      fullName: editForm.fullName, 
+      email: editForm.email, 
+      mobile: editForm.mobile,
+      dob: editForm.dob, 
+      whatsapp: editForm.whatsapp, 
+      messenger: editForm.messenger, 
+      instagram: editForm.instagram, 
+      avatar: editForm.avatar 
     }));
     setShowEditProfileModal(false);
     showToastMessage("Profile & Settings updated!");
   };
 
   const saveNewRestaurant = () => {
-    if (!newResForm.name || !newResForm.address) return showToastMessage("Please fill in Name and Address.");
-    const newRes = { id: Math.random().toString(36).substr(2, 9), name: newResForm.name, category: newResForm.category, address: newResForm.address, lat: newResForm.lat, lng: newResForm.lng, rating: 0, img: newResForm.img, verified: false, desc: 'A newly added community spot.' };
-    setRestaurants(prev => [newRes, ...prev]); setSelectedRes(newRes); setIsAddingNewRes(false); showToastMessage("Restaurant added successfully!");
+    if (!newResForm.name || !newResForm.address) {
+      showToastMessage("Please fill in Name and Address.");
+      return;
+    }
+    const newRes = { 
+      id: Math.random().toString(36).substr(2, 9), 
+      name: newResForm.name, 
+      category: newResForm.category, 
+      address: newResForm.address, 
+      lat: newResForm.lat, 
+      lng: newResForm.lng, 
+      rating: 0, 
+      img: newResForm.img, 
+      verified: false 
+    };
+    setRestaurants(prev => [newRes, ...prev]); 
+    setSelectedRes(newRes); 
+    setIsAddingNewRes(false); 
+    showToastMessage("Restaurant added successfully!");
   };
 
-  const submitHack = (e) => {
+  const submitHack = async (e) => {
     e.preventDefault();
     if (!userData.isVerified && appSettings.requireOTP) {
-      setShowAddHackModal(false); return setShowVerifyModal(true);
+      setShowAddHackModal(false); 
+      setShowVerifyModal(true);
+      return;
     }
     
     const formData = new FormData(e.target);
     const savings = Number(formData.get('savings'));
+    const newHackId = Math.random().toString(36).substr(2, 9);
+    
     const newHack = {
-      id: Math.random().toString(36).substr(2, 9), resId: selectedRes.id, title: formData.get('title'), desc: formData.get('desc'),
-      savings: savings, votes: 1, user: userData.username, avatar: userData.avatar, status: appSettings.autoApproveHacks ? 'approved' : 'pending', isPinned: false
+      id: newHackId, 
+      resId: selectedRes.id, 
+      title: formData.get('title'), 
+      desc: formData.get('desc'),
+      savings: savings, 
+      votes: 1, 
+      user: userData.username,
+      avatar: userData.avatar, 
+      status: appSettings.autoApproveHacks ? 'approved' : 'pending',
+      isPinned: false
     };
 
-    setHacks(prev => [newHack, ...prev]);
+    // Firebase Write
+    if (firebaseUser && db) {
+      try {
+        const hackRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'hacks'), newHackId);
+        await setDoc(hackRef, newHack);
+      } catch (err) {
+        console.error("Error writing to Firebase:", err);
+      }
+    } else {
+      setHacks(prev => [newHack, ...prev]);
+    }
+
     setUserData(prev => ({ ...prev, points: prev.points + 50, hacksCount: prev.hacksCount + 1, totalSavings: prev.totalSavings + savings }));
     setShowAddHackModal(false);
     showToastMessage(appSettings.autoApproveHacks ? "Hack published! +50 Points" : "Hack submitted for review! +50 Points");
   };
 
   const handleUpgradePro = (method) => {
-    if (method === 'points' && userData.points < 1000) return showToastMessage("Not enough points!");
+    if (method === 'points' && userData.points < 1000) {
+      showToastMessage("Not enough points!");
+      return;
+    }
     setUserData(prev => ({ ...prev, isPro: true, points: method === 'points' ? prev.points - 1000 : prev.points }));
     showToastMessage("Welcome to PRO! All hacks unlocked.");
   };
@@ -340,66 +547,190 @@ export default function App() {
   };
 
   const openNav = (type, lat, lng) => {
-    const urls = { google: `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, apple: `http://maps.apple.com/?daddr=${lat},${lng}`, waze: `https://waze.com/ul?ll=${lat},${lng}&navigate=yes` };
+    const urls = { 
+      google: `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, 
+      apple: `http://maps.apple.com/?daddr=${lat},${lng}`, 
+      waze: `https://waze.com/ul?ll=${lat},${lng}&navigate=yes` 
+    };
     window.open(urls[type]);
   };
 
   const exportCSV = () => {
     const headers = ['ID', 'Name', 'Email', 'Status', 'Verified', 'Posts', 'Last Login'];
-    const rows = usersList.map(u => [ u.id, u.username, u.email, u.status, String(u.isVerified).toUpperCase(), u.posts || 0, u.lastLogin || u.joined ]);
-    const csvContent = `data:text/csv;charset=utf-8,${headers.join(',')}\n${rows.map(e => e.join(',')).join('\n')}`;
+    const rows = usersList.map(u => [ 
+      u.id, 
+      u.username, 
+      u.email, 
+      u.status, 
+      String(u.isVerified).toUpperCase(), 
+      u.posts || 0, 
+      u.lastLogin || u.joined 
+    ]);
+    
+    let csvContent = "data:text/csv;charset=utf-8," + headers.join(',') + "\n";
+    rows.forEach(row => {
+      csvContent += row.join(',') + "\n";
+    });
+    
     const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a"); link.setAttribute("href", encodedUri); link.setAttribute("download", `user_data_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link); link.click(); document.body.removeChild(link); showToastMessage("Excel (CSV) exported successfully!");
+    const link = document.createElement("a"); 
+    link.setAttribute("href", encodedUri); 
+    link.setAttribute("download", `user_data_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link); 
+    link.click(); 
+    document.body.removeChild(link); 
+    showToastMessage("Excel (CSV) exported successfully!");
   };
 
   const exportXML = () => {
     let xmlStr = '<?xml version="1.0" encoding="UTF-8"?>\n<users>\n';
     usersList.forEach(u => {
-      xmlStr += `  <user id="${u.id}">\n    <name>${u.username}</name>\n    <email>${u.email}</email>\n    <status>${u.status}</status>\n    <verified>${String(u.isVerified)}</verified>\n    <posts>${u.posts || 0}</posts>\n    <lastLogin>${u.lastLogin || u.joined}</lastLogin>\n  </user>\n`;
+      xmlStr += '  <user id="' + u.id + '">\n';
+      xmlStr += '    <name>' + u.username + '</name>\n';
+      xmlStr += '    <email>' + u.email + '</email>\n';
+      xmlStr += '    <status>' + u.status + '</status>\n';
+      xmlStr += '    <verified>' + String(u.isVerified) + '</verified>\n';
+      xmlStr += '    <posts>' + (u.posts || 0) + '</posts>\n';
+      xmlStr += '    <lastLogin>' + (u.lastLogin || u.joined) + '</lastLogin>\n';
+      xmlStr += '  </user>\n';
     });
     xmlStr += '</users>';
-    const blob = new Blob([xmlStr], { type: 'text/xml' }); const url = URL.createObjectURL(blob);
-    const link = document.createElement("a"); link.setAttribute("href", url); link.setAttribute("download", "data.xml");
-    document.body.appendChild(link); link.click(); document.body.removeChild(link); showToastMessage("XML data structure exported successfully!");
+    const blob = new Blob([xmlStr], { type: 'text/xml' }); 
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a"); 
+    link.setAttribute("href", url); 
+    link.setAttribute("download", "data.xml");
+    document.body.appendChild(link); 
+    link.click(); 
+    document.body.removeChild(link); 
+    showToastMessage("XML data structure exported successfully!");
   };
 
-  // --- Advanced Admin Handlers ---
-  const adminTogglePin = (id) => { setHacks(prev => prev.map(h => h.id === id ? { ...h, isPinned: !h.isPinned } : h)); showToastMessage("Pin status updated."); };
-  const adminAdjustUserPoints = (id, amount) => { setUsersList(prev => prev.map(u => u.id === id ? { ...u, points: u.points + amount } : u)); showToastMessage("Added points to user."); };
-  const adminWarnUser = (id) => { setUsersList(prev => prev.map(u => u.id === id ? { ...u, warnings: u.warnings + 1 } : u)); showToastMessage("Warning sent to user."); };
-  const adminChangeUserStatus = (id, status) => { setUsersList(prev => prev.map(u => u.id === id ? { ...u, status } : u)); showToastMessage("User status changed to " + status + "."); };
-  const adminResolveReport = (id, action) => { setReportsList(prev => prev.map(r => r.id === id ? { ...r, status: 'resolved' } : r)); if (action === 'delete') showToastMessage("Content deleted and report resolved."); else showToastMessage("Report dismissed."); };
-  const sendBroadcast = (e) => { e.preventDefault(); setGlobalAnnouncement(broadcastInput); setBroadcastInput(''); showToastMessage("Broadcast sent to all users!"); };
-  const toggleSetting = (key) => { setAppSettings(prev => ({ ...prev, [key]: !prev[key] })); showToastMessage("Setting updated."); };
-  const updateSettingValue = (key, value) => { setAppSettings(prev => ({ ...prev, [key]: value })); };
-  const adminApproveHack = (id) => { setHacks(prev => prev.map(h => h.id === id ? { ...h, status: 'approved' } : h)); showToastMessage("Hack Approved & Published!"); };
-  const adminRejectHack = (id) => { setHacks(prev => prev.filter(h => h.id !== id)); showToastMessage("Hack Rejected and Deleted."); };
-  const adminVerifyUser = (id) => { setUsersList(prev => prev.map(u => u.id === id ? { ...u, isVerified: true } : u)); showToastMessage("User Verified!"); };
-  const adminBlockUser = (id) => { setUsersList(prev => prev.map(u => u.id === id ? { ...u, status: u.status === 'blocked' ? 'active' : 'blocked' } : u)); showToastMessage("User Status Changed!"); };
-  const adminDeleteUser = (id) => { setUsersList(prev => prev.filter(u => u.id !== id)); showToastMessage("User Account Deleted."); };
-  const adminApproveBusiness = (req) => { setBusinessRequests(prev => prev.filter(b => b.id !== req.id)); setActiveBusinesses(prev => [...prev, { id: req.id, restaurant: req.restaurant, email: req.email, views: 0, promosActive: 0 }]); showToastMessage("Business Claim Approved!"); };
-  const adminRejectBusiness = (id) => { setBusinessRequests(prev => prev.map(b => b.id === id ? { ...b, status: 'rejected' } : b)); showToastMessage("Business Claim Rejected."); };
+  // --- Advanced Admin Handlers (With Firebase Updates) ---
+  const adminTogglePin = async (id) => { 
+    const hack = hacks.find(h => h.id === id);
+    if (hack && firebaseUser && db) {
+      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'hacks', id), { isPinned: !hack.isPinned });
+    } else {
+      setHacks(prev => prev.map(h => h.id === id ? { ...h, isPinned: !h.isPinned } : h)); 
+    }
+    showToastMessage("Pin status updated."); 
+  };
+  const adminAdjustUserPoints = (id, amount) => { 
+    setUsersList(prev => prev.map(u => u.id === id ? { ...u, points: u.points + amount } : u)); 
+    showToastMessage("Added points to user."); 
+  };
+  const adminWarnUser = (id) => { 
+    setUsersList(prev => prev.map(u => u.id === id ? { ...u, warnings: u.warnings + 1 } : u)); 
+    showToastMessage("Warning sent to user."); 
+  };
+  const adminChangeUserStatus = (id, status) => { 
+    setUsersList(prev => prev.map(u => u.id === id ? { ...u, status } : u)); 
+    showToastMessage("User status changed to " + status + "."); 
+  };
+  const adminResolveReport = (id, action) => { 
+    setReportsList(prev => prev.map(r => r.id === id ? { ...r, status: 'resolved' } : r)); 
+    if (action === 'delete') {
+      showToastMessage("Content deleted and report resolved."); 
+    } else {
+      showToastMessage("Report dismissed."); 
+    }
+  };
+  const sendBroadcast = (e) => { 
+    e.preventDefault(); 
+    setGlobalAnnouncement(broadcastInput); 
+    setBroadcastInput(''); 
+    showToastMessage("Broadcast sent to all users!"); 
+  };
+  const toggleSetting = (key) => { 
+    setAppSettings(prev => ({ ...prev, [key]: !prev[key] })); 
+    showToastMessage("Setting updated."); 
+  };
+  const updateSettingValue = (key, value) => { 
+    setAppSettings(prev => ({ ...prev, [key]: value })); 
+  };
+  const adminApproveHack = async (id) => { 
+    if (firebaseUser && db) {
+      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'hacks', id), { status: 'approved' });
+    } else {
+      setHacks(prev => prev.map(h => h.id === id ? { ...h, status: 'approved' } : h)); 
+    }
+    showToastMessage("Hack Approved & Published!"); 
+  };
+  const adminRejectHack = async (id) => { 
+    if (firebaseUser && db) {
+      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'hacks', id));
+    } else {
+      setHacks(prev => prev.filter(h => h.id !== id)); 
+    }
+    showToastMessage("Hack Rejected and Deleted."); 
+  };
+  const adminVerifyUser = (id) => { 
+    setUsersList(prev => prev.map(u => u.id === id ? { ...u, isVerified: true } : u)); 
+    showToastMessage("User Verified!"); 
+  };
+  const adminBlockUser = (id) => { 
+    setUsersList(prev => prev.map(u => u.id === id ? { ...u, status: u.status === 'blocked' ? 'active' : 'blocked' } : u)); 
+    showToastMessage("User Status Changed!"); 
+  };
+  const adminDeleteUser = (id) => { 
+    setUsersList(prev => prev.filter(u => u.id !== id)); 
+    showToastMessage("User Account Deleted."); 
+  };
+  const adminApproveBusiness = (req) => { 
+    setBusinessRequests(prev => prev.filter(b => b.id !== req.id)); 
+    setActiveBusinesses(prev => [...prev, { id: req.id, restaurant: req.restaurant, email: req.email, views: 0, promosActive: 0 }]); 
+    showToastMessage("Business Claim Approved!"); 
+  };
+  const adminRejectBusiness = (id) => { 
+    setBusinessRequests(prev => prev.map(b => b.id === id ? { ...b, status: 'rejected' } : b)); 
+    showToastMessage("Business Claim Rejected."); 
+  };
 
   const submitBusinessFlow = (e) => {
     e.preventDefault();
     if (ownerTab === 'claim') {
-      const newReq = { id: Math.random().toString(36).substr(2, 9), restaurant: selectedRes?.name || 'Unknown', user: userData.username, email: 'business@owner.com', status: 'pending', date: new Date().toISOString().split('T')[0] };
+      const newReq = { 
+        id: Math.random().toString(36).substr(2, 9), 
+        restaurant: selectedRes?.name || 'Unknown', 
+        user: userData.username, 
+        email: 'business@owner.com', 
+        status: 'pending', 
+        date: new Date().toISOString().split('T')[0] 
+      };
       setBusinessRequests(prev => [newReq, ...prev]);
-      setShowBusinessModal(false); showToastMessage("Claim requested! Our team will verify soon.");
+      setShowBusinessModal(false); 
+      showToastMessage("Claim requested! Our team will verify soon.");
     } else {
       if (promoteListing) {
         setProcessingPayment(true);
-        setTimeout(() => { setProcessingPayment(false); finalizeBusinessAdd(); }, 1500);
-      } else { finalizeBusinessAdd(); }
+        setTimeout(() => { 
+          setProcessingPayment(false); 
+          finalizeBusinessAdd(); 
+        }, 1500);
+      } else { 
+        finalizeBusinessAdd(); 
+      }
     }
   };
 
   const finalizeBusinessAdd = () => {
-    const newRes = { id: Math.random().toString(36).substr(2, 9), name: newResForm.name, category: newResForm.category, address: newResForm.address, lat: newResForm.lat, lng: newResForm.lng, rating: 0, img: newResForm.img, verified: true, isPromoted: promoteListing, desc: 'A new spot submitted by a business owner.' };
+    const newRes = { 
+      id: Math.random().toString(36).substr(2, 9), 
+      name: newResForm.name, 
+      category: newResForm.category, 
+      address: newResForm.address, 
+      lat: newResForm.lat, 
+      lng: newResForm.lng, 
+      rating: 0, 
+      img: newResForm.img, 
+      verified: true, 
+      isPromoted: promoteListing 
+    };
     setRestaurants(prev => [newRes, ...prev]);
     setActiveBusinesses(prev => [{ id: newRes.id, restaurant: newRes.name, email: userData.email, views: 0, promosActive: 0 }, ...prev]);
-    setShowBusinessModal(false); showToastMessage(promoteListing ? "Payment Success! Promoted listing added." : "Business listed successfully.");
+    setShowBusinessModal(false); 
+    showToastMessage(promoteListing ? "Payment Success! Promoted listing added." : "Business listed successfully.");
   };
 
   // --- Views ---
@@ -410,62 +741,63 @@ export default function App() {
           <div className="absolute top-[-50px] right-[-50px] w-64 h-64 bg-white/10 rounded-full blur-[80px]"></div>
           
           <h1 className="text-4xl font-black italic tracking-tighter mb-1 z-10">Tipid Menu</h1>
-          <p className="text-orange-100 font-medium mb-4 z-10 text-center text-sm px-6">Smart Savings for the Filipino Foodie.</p>
+          <p className="text-orange-100 font-medium mb-8 z-10 text-center text-sm px-6">Smart Savings for the Filipino Foodie.</p>
 
-          <div className="w-full bg-white p-5 rounded-[32px] shadow-2xl z-10 text-slate-800 flex flex-col gap-3 animate-in slide-in-from-bottom-8">
+          <div className="w-full bg-white p-6 sm:p-8 rounded-[32px] shadow-2xl z-10 text-slate-800 flex flex-col gap-4 animate-in slide-in-from-bottom-8">
+            <h2 className="text-2xl font-black mb-1 text-center text-slate-900">{appState === 'login' ? 'Welcome Back' : 'Create Account'}</h2>
             
             {/* Auth Method Toggles */}
-            <div className="flex bg-slate-100 p-1 rounded-xl w-full">
-              <button onClick={() => { setAuthMethod('email'); setAuthError(''); }} className={`flex-1 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${authMethod === 'email' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+            <div className="flex bg-slate-100 p-1 rounded-xl w-full mb-2">
+              <button onClick={() => { setAuthMethod('email'); setAuthError(''); }} className={`flex-1 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${authMethod === 'email' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
                 <Mail size={14}/> Email
               </button>
-              <button onClick={() => { setAuthMethod('mobile'); setAuthError(''); }} className={`flex-1 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${authMethod === 'mobile' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+              <button onClick={() => { setAuthMethod('mobile'); setAuthError(''); }} className={`flex-1 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${authMethod === 'mobile' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
                 <Phone size={14}/> Mobile
               </button>
             </div>
 
-            {authError && <div className="bg-red-50 border border-red-100 text-red-600 text-[10px] font-bold p-2 rounded-xl text-center">{authError}</div>}
+            {authError && <div className="bg-red-50 border border-red-100 text-red-600 text-xs font-bold p-3 rounded-xl text-center">{authError}</div>}
             
-            <form onSubmit={handleStandardAuth} className="flex flex-col gap-2.5">
+            <form onSubmit={handleStandardAuth} className="flex flex-col gap-3">
               {authMethod === 'email' ? (
                 <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Email</label>
-                  <input required type="email" value={authForm.email} onChange={e => setAuthForm({...authForm, email: e.target.value})} className="w-full bg-slate-50 px-4 py-2.5 rounded-xl font-bold text-slate-900 border border-slate-100 outline-none focus:ring-2 focus:ring-orange-500/20 mt-0.5 transition-all text-sm" placeholder="juan@example.com" />
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Email Address</label>
+                  <input required type="email" value={authForm.email} onChange={e => setAuthForm({...authForm, email: e.target.value})} className="w-full bg-slate-50 px-5 py-3.5 rounded-2xl font-bold text-slate-900 border border-slate-100 outline-none focus:ring-2 focus:ring-orange-500/20 mt-1 transition-all" placeholder="juan@example.com" />
                 </div>
               ) : (
                 <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Mobile</label>
-                  <div className="flex gap-1.5 mt-0.5">
-                    <span className="bg-slate-100 px-3 py-2 rounded-xl font-bold text-slate-500 border border-slate-100 flex items-center text-sm">+63</span>
-                    <input required type="tel" value={authForm.mobile} onChange={e => setAuthForm({...authForm, mobile: e.target.value.replace(/\D/g, '')})} maxLength={10} className="flex-1 bg-slate-50 px-4 py-2.5 rounded-xl font-bold text-slate-900 border border-slate-100 outline-none focus:ring-2 focus:ring-orange-500/20 transition-all text-sm" placeholder="912 345 6789" />
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Mobile Number</label>
+                  <div className="flex gap-2 mt-1">
+                    <span className="bg-slate-100 px-4 py-3.5 rounded-2xl font-bold text-slate-500 border border-slate-100 flex items-center">+63</span>
+                    <input required type="tel" value={authForm.mobile} onChange={e => setAuthForm({...authForm, mobile: e.target.value.replace(/\D/g, '')})} maxLength={10} className="flex-1 bg-slate-50 px-5 py-3.5 rounded-2xl font-bold text-slate-900 border border-slate-100 outline-none focus:ring-2 focus:ring-orange-500/20 transition-all" placeholder="912 345 6789" />
                   </div>
                 </div>
               )}
 
               <div>
                 <label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Password</label>
-                <input required type="password" value={authForm.password} onChange={e => setAuthForm({...authForm, password: e.target.value})} className="w-full bg-slate-50 px-4 py-2.5 rounded-xl font-bold text-slate-900 border border-slate-100 outline-none focus:ring-2 focus:ring-orange-500/20 mt-0.5 transition-all text-sm" placeholder="••••••••" />
+                <input required type="password" value={authForm.password} onChange={e => setAuthForm({...authForm, password: e.target.value})} className="w-full bg-slate-50 px-5 py-3.5 rounded-2xl font-bold text-slate-900 border border-slate-100 outline-none focus:ring-2 focus:ring-orange-500/20 mt-1 transition-all" placeholder="••••••••" />
               </div>
 
-              <button disabled={authLoading} type="submit" className="w-full py-3 mt-1 bg-orange-600 text-white font-black rounded-2xl shadow-lg shadow-orange-600/20 uppercase text-[10px] tracking-widest hover:scale-[1.01] active:scale-95 transition-all">
+              <button disabled={authLoading} type="submit" className="w-full py-4 mt-2 bg-orange-600 text-white font-black rounded-2xl shadow-lg shadow-orange-600/20 uppercase text-xs tracking-widest hover:scale-[1.02] active:scale-95 transition-all">
                 {authLoading ? 'Please wait...' : (appState === 'login' ? 'Sign In' : 'Sign Up')}
               </button>
             </form>
 
             <div className="text-center">
-              <button type="button" onClick={() => setAppState(appState === 'login' ? 'register' : 'login')} className="text-[10px] font-bold text-slate-400 hover:text-orange-500 transition-colors uppercase tracking-wide">
-                {appState === 'login' ? "New account? Sign Up" : "Have account? Sign In"}
+              <button type="button" onClick={() => setAppState(appState === 'login' ? 'register' : 'login')} className="text-xs font-bold text-slate-400 hover:text-orange-500 transition-colors">
+                {appState === 'login' ? "Don't have an account? Sign Up" : "Already have an account? Sign In"}
               </button>
             </div>
             
-            <div className="flex items-center gap-3 my-0.5"><div className="h-px bg-slate-100 flex-1"></div><span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">OR</span><div className="h-px bg-slate-100 flex-1"></div></div>
+            <div className="flex items-center gap-4 my-1"><div className="h-px bg-slate-100 flex-1"></div><span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">OR</span><div className="h-px bg-slate-100 flex-1"></div></div>
             
             {/* Facebook Auth Button */}
-            <button onClick={handleFacebookAuth} disabled={authLoading} type="button" className="relative z-20 w-full py-2.5 bg-[#1877F2] hover:bg-[#166FE5] text-white font-black rounded-2xl flex justify-center items-center gap-2 uppercase text-[10px] tracking-widest active:scale-95 transition-all shadow-md">
-              <Facebook size={16} className="fill-white" /> Facebook
+            <button onClick={handleFacebookAuth} disabled={authLoading} type="button" className="relative z-20 w-full py-3.5 bg-[#1877F2] hover:bg-[#166FE5] text-white font-black rounded-2xl flex justify-center items-center gap-2 uppercase text-xs tracking-widest active:scale-95 transition-all shadow-md">
+              <Facebook size={18} className="fill-white" /> Continue with Facebook
             </button>
 
-            <button type="button" onClick={handleGuestLogin} className="relative z-20 w-full py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 font-black rounded-2xl border border-slate-200 uppercase text-[10px] tracking-widest active:scale-95 transition-all shadow-sm">
+            <button type="button" onClick={handleGuestLogin} className="relative z-20 w-full py-3.5 bg-slate-50 hover:bg-slate-100 text-slate-600 font-black rounded-2xl border border-slate-200 uppercase text-xs tracking-widest active:scale-95 transition-all shadow-sm">
               Continue as Guest
             </button>
           </div>
@@ -481,6 +813,7 @@ export default function App() {
     const pendingHacksCount = hacks.filter(h => h.status === 'pending').length;
     const pendingReportsCount = reportsList.filter(r => r.status === 'pending').length;
     const pendingBusinessCount = businessRequests.filter(b => b.status === 'pending').length;
+
     const activeUsersCount = usersList.filter(u => u.status === 'active').length;
     const inactiveUsersCount = usersList.filter(u => u.status === 'inactive').length;
 
@@ -756,6 +1089,7 @@ export default function App() {
 
           {adminTab === 'settings' && (
             <div className="p-5 space-y-6 animate-in fade-in">
+              
               <div>
                 <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest mb-3">Admin Profile (Me)</h3>
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
@@ -841,6 +1175,7 @@ export default function App() {
         Tipid Menu
       </h1>
       <div className="flex items-center gap-3">
+        {/* Properly Sized & Aligned Admin Command Center Button */}
         {userData.isAdmin && (
           <button 
             onClick={() => setActiveView('admin')} 
@@ -1257,7 +1592,7 @@ export default function App() {
                 <div className="mb-6 flex-shrink-0">
                   <h3 className="text-2xl font-black mb-1 flex items-center gap-2 tracking-tight text-slate-800"><Plus size={24} className="text-orange-500"/> Share Hack</h3>
                   {selectedRes ? (
-                    <p className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><MapPinIcon size={12} className="text-orange-400"/> {selectedRes.name}</p>
+                    <p className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><MapIcon size={12} className="text-orange-400"/> {selectedRes.name}</p>
                   ) : (
                     <div className="mt-3 relative z-10">
                       <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-100 rounded-xl mb-3">
@@ -1375,7 +1710,7 @@ export default function App() {
               ) : (
                 <form onSubmit={submitBusinessFlow} className="space-y-5">
                   <div className="flex items-start gap-2 bg-blue-50 border border-blue-100 p-3 rounded-xl mb-2">
-                    <span className="text-blue-500 mt-0.5"><Info size={16}/></span>
+                    <Info size={16} className="text-blue-500 shrink-0 mt-0.5"/>
                     <p className="text-[10px] font-bold text-blue-700 leading-snug">Owners: Get more foot traffic by adding your spot. Pin your exact location below.</p>
                   </div>
 
